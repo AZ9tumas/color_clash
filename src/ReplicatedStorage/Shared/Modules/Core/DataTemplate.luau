@@ -1,0 +1,20 @@
+local DataTemplate = {
+	Cash = 0,
+	Wins = 0,
+	Kills = 0,
+	Inventory = {
+		Weapons = {
+			["Pistol"] = true,
+			["Wooden Knife"] = true
+		},
+		Skins = {},
+		Effects = {}
+	},
+	Equipped = {
+		Main = "Pistol",
+		Melee = "Wooden Knife"
+	},
+	Settings = {}
+}
+
+return DataTemplate
