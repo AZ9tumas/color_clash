@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 
 local CurrencyServer = require(ServerScriptService.Server.Services.CurrencyService.CurrencyServer)
+local SpectateMechanic = require(ServerScriptService.Server.Classes.SpectateMechanic)
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
 local RewardConfig = require(Shared.Modules.Core.RewardConfig)
 local PlayerUtil = require(Shared.Modules.Utils.PlayerUtil)
@@ -30,6 +31,9 @@ function RewardManager.ProcessDeath(victim, killerName, weaponName, victimsCount
 	
 	CurrencyServer.AddCash(victim, placementReward)
 	RoundRemotes.GetDeathScreenEvent():FireClient(victim, killerName, weaponName, victimsCount, placement, totalReward, roundKills)
+
+	SpectateMechanic.Refresh()
+	task.delay(3, function() SpectateMechanic.Start(victim) end)
 end
 
 function RewardManager.ProcessWin(player)

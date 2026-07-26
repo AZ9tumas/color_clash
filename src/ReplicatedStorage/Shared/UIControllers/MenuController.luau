@@ -7,6 +7,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage.Shared
 local UIAnimations = require(Shared.Modules.Utils.UIAnimations)
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
+local SpectateRemotes = require(Shared.Remotes.SpectateRemotes)
 
 local MenuController = {}
 
@@ -67,6 +68,23 @@ local function closeSubMenu(targetFrame)
 	task.delay(0.15, function() UIAnimations.PopIn(MenuHolder) end)
 end
 
+local function enterGame(onEntered)
+	if playClicked or player:GetAttribute("InMenu") == false then return end
+	playClicked = true
+	UIAnimations.PopOut(MenuHolder)
+
+	task.delay(0.6, function()
+		Menu.Enabled = false
+		camera.CameraType = Enum.CameraType.Custom
+		if player.Character and player.Character:FindFirstChild("Humanoid") then
+			camera.CameraSubject = player.Character.Humanoid
+		end
+		RoundRemotes.GetPlayGameEvent():FireServer()
+
+		if onEntered then onEntered() end
+	end)
+end
+
 function MenuController.Init()
 	local ReplicatedFirst = game:GetService("ReplicatedFirst")
 	pcall(function() ReplicatedFirst:RemoveDefaultLoadingScreen() end)
@@ -85,6 +103,14 @@ function MenuController.Init()
 	setupMenuButton(MenuScrollingFrame.Shop, UDim2.new(0.375, 0, 0.116, 0), UDim2.new(1, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
 	setupMenuButton(MenuScrollingFrame.Settings, UDim2.new(0.193, 0, 0.116, 0), UDim2.new(0.866, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
 	setupMenuButton(MenuScrollingFrame.Leaderboard, UDim2.new(0.193, 0, 0.116, 0), UDim2.new(0.81, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
+
+	local SpectateFrame = MenuScrollingFrame:FindFirstChild("Spectate")
+	if SpectateFrame then
+		setupMenuButton(SpectateFrame, UDim2.new(0.193, 0, 0.116, 0), UDim2.new(0.866, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
+		SpectateFrame.btn.MouseButton1Click:Connect(function()
+			enterGame(function() SpectateRemotes.GetRequestEvent():FireServer("Start") end)
+		end)
+	end
 
 	MenuScrollingFrame.Shop.btn.MouseButton1Click:Connect(function() if not playClicked then openSubMenu(ShopFrameUI) end end)
 	MenuScrollingFrame.Leaderboard.btn.MouseButton1Click:Connect(function() if not playClicked then openSubMenu(LeaderboardFrameUI) end end)
@@ -112,20 +138,7 @@ function MenuController.Init()
 		end
 	end)
 
-	PlayBtn.MouseButton1Click:Connect(function()
-		if playClicked or player:GetAttribute("InMenu") == false then return end
-		playClicked = true
-		UIAnimations.PopOut(MenuHolder)
-		
-		task.delay(0.6, function()
-			Menu.Enabled = false
-			camera.CameraType = Enum.CameraType.Custom
-			if player.Character and player.Character:FindFirstChild("Humanoid") then
-				camera.CameraSubject = player.Character.Humanoid
-			end
-			RoundRemotes.GetPlayGameEvent():FireServer()
-		end)
-	end)
+	PlayBtn.MouseButton1Click:Connect(function() enterGame() end)
 
 	local loadingScreen = ReplicatedFirst:FindFirstChild("LoadingScreen")
 	if loadingScreen then

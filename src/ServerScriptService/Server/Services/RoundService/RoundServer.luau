@@ -12,6 +12,7 @@ local VotingManager = require(Shared.Modules.Game.VotingManager)
 local RewardManager = require(Shared.Modules.Game.RewardManager)
 local signal = require(Shared.Packages.signal)
 local RoundMechanic = require(ServerScriptService.Server.Classes.RoundMechanic)
+local SpectateMechanic = require(ServerScriptService.Server.Classes.SpectateMechanic)
 
 local RoundServer = {}
 RoundServer.StateChanged = signal.new()
@@ -64,6 +65,7 @@ local function startRoundLoop()
 					PlayerUtil.TeleportEntity(player.Character, gameSpawn)
 				end
 			end
+			SpectateMechanic.Refresh()
 
 			setState(RoundConfig.States.InGame, RoundConfig.CurrentMode.GameDuration)
 			roundMechanic:Start()
@@ -86,7 +88,8 @@ local function startRoundLoop()
 					RewardManager.ProcessWin(player)
 				end
 			end
-			
+			SpectateMechanic.Refresh()
+
 			roundMechanic:Stop()
 			setState(RoundConfig.States.InGame, 0)
 			task.wait(2)
