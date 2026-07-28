@@ -22,7 +22,18 @@ local ExitBtn = SpectateFrame:WaitForChild("Exit")
 local SpectatorsText = SpectateFrame:WaitForChild("Spectators")
 
 local SpectateBtn = MainHUD:WaitForChild("SpectateButton")
-local SpectateBtnBackground = MainHUD:WaitForChild("Frame")
+
+-- Each HUD button has a backdrop Frame and they all share the name "Frame", so pick the
+-- one sitting at this button's position rather than trusting child order.
+local SpectateBtnBackground = nil
+for _, child in MainHUD:GetChildren() do
+	if child:IsA("Frame") and child.Name == "Frame"
+		and math.abs(child.Position.Y.Scale - SpectateBtn.Position.Y.Scale) < 0.01
+	then
+		SpectateBtnBackground = child
+		break
+	end
+end
 
 local currentTarget = nil
 
@@ -45,7 +56,7 @@ local function updateButtonVisibility()
 		and hasActivePlayers()
 
 	SpectateBtn.Visible = shouldShow
-	SpectateBtnBackground.Visible = shouldShow
+	if SpectateBtnBackground then SpectateBtnBackground.Visible = shouldShow end
 end
 
 local function setTarget(target, spectatorCount)
@@ -77,7 +88,7 @@ function SpectateController.Init()
 	UIAnimations.BindButtonAnimations(RightBtn)
 
 	SpectateBtn.Visible = false
-	SpectateBtnBackground.Visible = false
+	if SpectateBtnBackground then SpectateBtnBackground.Visible = false end
 
 	local requestEvent = SpectateRemotes.GetRequestEvent()
 

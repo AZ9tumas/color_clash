@@ -68,6 +68,33 @@ local function closeSubMenu(targetFrame)
 	task.delay(0.15, function() UIAnimations.PopIn(MenuHolder) end)
 end
 
+-- Guarded on playClicked alone rather than the InMenu attribute, so returning to the menu
+-- can restart it immediately without waiting for the server attribute to replicate back.
+local menuCamConnection = nil
+local function startMenuCamera()
+	if menuCamConnection then menuCamConnection:Disconnect() end
+
+	menuCamConnection = RunService.RenderStepped:Connect(function()
+		if not playClicked then
+			camera.CameraType = Enum.CameraType.Scriptable
+			camera.CFrame = CamPart.CFrame
+		else
+			if menuCamConnection then
+				menuCamConnection:Disconnect()
+				menuCamConnection = nil
+			end
+		end
+	end)
+end
+
+-- Puts the player back in the state they are in the moment they join.
+function MenuController.ReturnToMenu()
+	playClicked = false
+	Menu.Enabled = true
+	startMenuCamera()
+	UIAnimations.PopIn(MenuHolder)
+end
+
 local function enterGame(onEntered)
 	if playClicked or player:GetAttribute("InMenu") == false then return end
 	playClicked = true
@@ -128,15 +155,7 @@ function MenuController.Init()
 	LeaderboardExitBtn.MouseButton1Click:Connect(function() closeSubMenu(LeaderboardFrameUI) end)
 	SettingsExitBtn.MouseButton1Click:Connect(function() closeSubMenu(SettingsFrameUI) end)
 
-	local menuCamConnection
-	menuCamConnection = RunService.RenderStepped:Connect(function()
-		if not playClicked and player:GetAttribute("InMenu") ~= false then
-			camera.CameraType = Enum.CameraType.Scriptable
-			camera.CFrame = CamPart.CFrame
-		else
-			if menuCamConnection then menuCamConnection:Disconnect() end
-		end
-	end)
+	startMenuCamera()
 
 	PlayBtn.MouseButton1Click:Connect(function() enterGame() end)
 

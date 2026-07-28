@@ -13,6 +13,8 @@ local RewardManager = require(Shared.Modules.Game.RewardManager)
 local signal = require(Shared.Packages.signal)
 local RoundMechanic = require(ServerScriptService.Server.Classes.RoundMechanic)
 local SpectateMechanic = require(ServerScriptService.Server.Classes.SpectateMechanic)
+local HitPartMechanic = require(ServerScriptService.Server.Classes.HitPartMechanic)
+local MapMechanic = require(ServerScriptService.Server.Classes.MapMechanic)
 
 local RoundServer = {}
 RoundServer.StateChanged = signal.new()
@@ -49,6 +51,10 @@ local function startRoundLoop()
 			RoundConfig.CurrentMode = VotingManager.GetWinner(defaultMode)
 
 			setState(RoundConfig.States.Intermission, RoundConfig.CurrentMode.IntermissionDuration)
+			-- Every round gets a fresh grid. Must run before HitPartMechanic.Build(), which
+			-- measures Workspace.Map to size the pad.
+			MapMechanic.Generate()
+			HitPartMechanic.Build()
 			for _, player in Players:GetPlayers() do
 				if player:GetAttribute("InMenu") == false then 
 					player:SetAttribute("Kills", 0) 
@@ -163,6 +169,34 @@ function RoundServer.Init()
 			if hrp then kbVelocity = (-hrp.CFrame.LookVector * 60) + Vector3.new(0, 80, 0) end
 			PlayerUtil.RagdollAndTeleport(player, lobbySpawn, kbVelocity)
 		end
+	end)
+
+	-- Harvest cell templates from the authored map. Generation itself happens in the
+	-- Intermission step of every round, including the first.
+	MapMechanic.Init()
+
+	RoundRemotes.GetMainMenuEvent().OnServerEvent:Connect(function(player)
+		local lobbySpawn = Workspace:FindFirstChild("Spawnlocation")
+
+		SpectateMechanic.Stop(player)
+
+		if player:GetAttribute("IsPlaying") then
+			player:SetAttribute("IsPlaying", false)
+
+			local char = player.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			local kbVelocity = Vector3.new(0, 80, 0)
+			if hrp then kbVelocity = (-hrp.CFrame.LookVector * 60) + Vector3.new(0, 80, 0) end
+
+			PlayerUtil.RagdollAndTeleport(player, lobbySpawn, kbVelocity)
+			RewardManager.ProcessDeath(player, "The Environment", "Left To The Main Menu", -1)
+		else
+			PlayerUtil.RemoveWeapons(player)
+			PlayerUtil.TeleportEntity(player.Character, lobbySpawn)
+		end
+
+		-- Back to the state a player is in the moment they join.
+		player:SetAttribute("InMenu", true)
 	end)
 
 	startRoundLoop()

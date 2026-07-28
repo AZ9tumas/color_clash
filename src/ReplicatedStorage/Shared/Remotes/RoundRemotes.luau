@@ -13,7 +13,8 @@ local remoteNames = {
 	KillFeedEvent = "RemoteEvent",
 	DeathScreenEvent = "RemoteEvent",
 	PlayGameEvent = "RemoteEvent",
-	ResetEvent = "RemoteEvent"
+	ResetEvent = "RemoteEvent",
+	MainMenuEvent = "RemoteEvent"
 }
 
 if isServer then
@@ -42,5 +43,6 @@ function RoundRemotes.GetKillFeedEvent() return getRemote("KillFeedEvent") end
 function RoundRemotes.GetDeathScreenEvent() return getRemote("DeathScreenEvent") end
 function RoundRemotes.GetPlayGameEvent() return getRemote("PlayGameEvent") end
 function RoundRemotes.GetResetEvent() return getRemote("ResetEvent") end
+function RoundRemotes.GetMainMenuEvent() return getRemote("MainMenuEvent") end
 
 return RoundRemotes

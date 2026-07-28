@@ -5,9 +5,9 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Shared = ReplicatedStorage.Shared
 local RoundConfig = require(Shared.Modules.Core.RoundConfig)
+local MapConfig = require(Shared.Modules.Core.MapConfig)
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
 local PlayerUtil = require(Shared.Modules.Utils.PlayerUtil)
-local RewardManager = require(Shared.Modules.Game.RewardManager)
 local janitor = require(Shared.Packages.janitor)
 
 local rng = Random.new()
@@ -24,7 +24,7 @@ end
 
 function RoundMechanic:Start()
 	local mechanicThread = task.spawn(function()
-		local colors = {"Blue", "Red", "Green", "Yellow"}
+		local colors = MapConfig.ColorOrder
 		local map = Workspace:FindFirstChild("Map")
 
 		task.wait(0.25)
@@ -55,31 +55,6 @@ function RoundMechanic:Start()
 			end
 			if self.roundServer.CurrentState ~= RoundConfig.States.InGame then break end
 
-			local playersToKill = {}
-			if map then
-				for _, player in Players:GetPlayers() do
-					if player:GetAttribute("IsPlaying") and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-						local params = RaycastParams.new()
-						params.FilterType = Enum.RaycastFilterType.Include
-						params.FilterDescendantsInstances = {map}
-
-						local result = Workspace:Raycast(player.Character.HumanoidRootPart.Position, Vector3.new(0, -500, 0), params)
-						local isOnWrongColor = true
-
-						if result and result.Instance then
-							local correctFolder = map:FindFirstChild(self.roundServer.CurrentColor)
-							if correctFolder and result.Instance:IsDescendantOf(correctFolder) then
-								isOnWrongColor = false
-							end
-						end
-
-						if isOnWrongColor then
-							table.insert(playersToKill, player)
-						end
-					end
-				end
-			end
-
 			local hiddenParts = {}
 			if map then
 				for _, folder in map:GetChildren() do
@@ -98,17 +73,9 @@ function RoundMechanic:Start()
 				end
 			end
 
+			-- Players left standing on a hidden cell now fall onto Workspace["hit part"],
+			-- which eliminates them on touch. No raycast sweep needed here.
 			task.wait(0.2)
-
-			for _, player in ipairs(playersToKill) do
-				if player:GetAttribute("IsPlaying") then
-					player:SetAttribute("IsPlaying", false)
-					local lobbySpawn = Workspace:FindFirstChild("Spawnlocation")
-					local kbVelocity = Vector3.new(math.random(-30, 30), 80, math.random(-30, 30))
-					PlayerUtil.RagdollAndTeleport(player, lobbySpawn, kbVelocity)
-					RewardManager.ProcessDeath(player, "The Map", "Stood On The Wrong Color", -1)
-				end
-			end
 
 			local hideTimer = 8
 			while hideTimer > 0 and self.roundServer.CurrentState == RoundConfig.States.InGame do

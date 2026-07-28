@@ -26,7 +26,10 @@ local function broadcast()
 
 	for player, index in pairs(SpectateMechanic.Spectators) do
 		local target = nil
-		if player.Parent == Players and not player:GetAttribute("IsPlaying") then
+		if player.Parent == Players
+			and not player:GetAttribute("IsPlaying")
+			and player:GetAttribute("InMenu") == false
+		then
 			target = active[index]
 		end
 
@@ -53,6 +56,8 @@ end
 function SpectateMechanic.Start(player)
 	if player.Parent ~= Players then return end
 	if player:GetAttribute("IsPlaying") then return end
+	-- Someone sitting in the main menu must not have their camera pulled into the arena.
+	if player:GetAttribute("InMenu") ~= false then return end
 
 	if #SpectateMechanic.GetActive() == 0 then
 		SpectateRemotes.GetUpdateEvent():FireClient(player, nil, 0)
