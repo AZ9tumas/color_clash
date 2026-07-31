@@ -14,7 +14,8 @@ local remoteNames = {
 	DeathScreenEvent = "RemoteEvent",
 	PlayGameEvent = "RemoteEvent",
 	ResetEvent = "RemoteEvent",
-	MainMenuEvent = "RemoteEvent"
+	MainMenuEvent = "RemoteEvent",
+	SelectTeamEvent = "RemoteEvent"
 }
 
 if isServer then
@@ -44,5 +45,6 @@ function RoundRemotes.GetDeathScreenEvent() return getRemote("DeathScreenEvent")
 function RoundRemotes.GetPlayGameEvent() return getRemote("PlayGameEvent") end
 function RoundRemotes.GetResetEvent() return getRemote("ResetEvent") end
 function RoundRemotes.GetMainMenuEvent() return getRemote("MainMenuEvent") end
+function RoundRemotes.GetSelectTeamEvent() return getRemote("SelectTeamEvent") end
 
 return RoundRemotes

@@ -31,6 +31,48 @@ local function setState(newState, time)
 	RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft)
 end
 
+-- Wiped before every selection window so players re-pick each round rather than being
+-- silently carried over on last round's side.
+local function clearTeams()
+	for _, p in Players:GetPlayers() do
+		p:SetAttribute("Team", nil)
+	end
+end
+
+-- Counts only the players who started the round, so someone leaving cannot make a team
+-- look wiped out and end the round early.
+local function aliveByTeam(roster)
+	local counts = {}
+	for _, name in RoundConfig.TeamNames do counts[name] = 0 end
+	for player, team in pairs(roster) do
+		if player:GetAttribute("IsPlaying") and counts[team] then counts[team] += 1 end
+	end
+	return counts
+end
+
+local function killsByTeam(roster)
+	local counts = {}
+	for _, name in RoundConfig.TeamNames do counts[name] = 0 end
+	for player, team in pairs(roster) do
+		if counts[team] then counts[team] += (player:GetAttribute("Kills") or 0) end
+	end
+	return counts
+end
+
+-- Last team standing; on timeout the higher kill total wins, then the most survivors,
+-- and a dead heat on both is a draw (nil).
+local function resolveTeamWinner(roster, wipedOutWinner)
+	if wipedOutWinner then return wipedOutWinner end
+
+	local kills = killsByTeam(roster)
+	local alive = aliveByTeam(roster)
+	local a, b = RoundConfig.TeamNames[1], RoundConfig.TeamNames[2]
+
+	if kills[a] ~= kills[b] then return kills[a] > kills[b] and a or b end
+	if alive[a] ~= alive[b] then return alive[a] > alive[b] and a or b end
+	return nil
+end
+
 local function startRoundLoop()
 	task.spawn(function()
 		while true do
@@ -50,6 +92,15 @@ local function startRoundLoop()
 
 			RoundConfig.CurrentMode = VotingManager.GetWinner(defaultMode)
 
+			-- Team modes get a selection window between voting and intermission. Picking a
+			-- side is what buys you into the round; anyone who does not pick sits it out in
+			-- the lobby, exactly like an eliminated player or a mid-round joiner.
+			if RoundConfig.CurrentMode.TeamBased then
+				clearTeams()
+				setState(RoundConfig.States.TeamSelect, RoundConfig.TeamSelectDuration)
+				while RoundServer.TimeLeft > 0 do task.wait(1); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
+			end
+
 			setState(RoundConfig.States.Intermission, RoundConfig.CurrentMode.IntermissionDuration)
 			-- Every round gets a fresh grid. Must run before HitPartMechanic.Build(), which
 			-- measures Workspace.Map to size the pad.
@@ -64,11 +115,19 @@ local function startRoundLoop()
 
 			while RoundServer.TimeLeft > 0 do task.wait(1); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
 
+			local mode = RoundConfig.CurrentMode
 			local gameSpawn = Workspace:FindFirstChild("Game")
+			local roster = {}
+
 			for _, player in Players:GetPlayers() do
-				if player:GetAttribute("InMenu") == false then
+				local team = player:GetAttribute("Team")
+				local eligible = player:GetAttribute("InMenu") == false
+					and (not mode.TeamBased or table.find(RoundConfig.TeamNames, team) ~= nil)
+
+				if eligible then
 					player:SetAttribute("IsPlaying", true)
 					PlayerUtil.TeleportEntity(player.Character, gameSpawn)
+					if mode.TeamBased then roster[player] = team end
 				end
 			end
 			SpectateMechanic.Refresh()
@@ -76,10 +135,36 @@ local function startRoundLoop()
 			setState(RoundConfig.States.InGame, RoundConfig.CurrentMode.GameDuration)
 			roundMechanic:Start()
 			
+			-- Only trust the wipeout check if both sides actually fielded someone.
+			local teamStart = mode.TeamBased and aliveByTeam(roster) or nil
+			local teamsViable = teamStart ~= nil
+			if teamsViable then
+				for _, name in RoundConfig.TeamNames do
+					if teamStart[name] == 0 then teamsViable = false end
+				end
+			end
+
+			local wipedOutWinner = nil
+
 			while RoundServer.TimeLeft > 0 do
-				if PlayerUtil.GetActivePlayerCount() <= (RoundConfig.CurrentMode.MinimumPlayers > 1 and 1 or 0) then break end
+				if teamsViable then
+					local alive = aliveByTeam(roster)
+					local survivors = {}
+					for _, name in RoundConfig.TeamNames do
+						if alive[name] > 0 then table.insert(survivors, name) end
+					end
+					if #survivors <= 1 then
+						wipedOutWinner = survivors[1]
+						break
+					end
+				elseif PlayerUtil.GetActivePlayerCount() <= (mode.MinimumPlayers > 1 and 1 or 0) then
+					break
+				end
+
 				task.wait(1); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft)
 			end
+
+			local teamWinner = teamsViable and resolveTeamWinner(roster, wipedOutWinner) or nil
 
 			local lobbySpawn = Workspace:FindFirstChild("Spawnlocation")
 			for _, player in Players:GetPlayers() do
@@ -91,7 +176,16 @@ local function startRoundLoop()
 						if hum then hum.Health = hum.MaxHealth end
 					end
 					PlayerUtil.TeleportEntity(player.Character, lobbySpawn)
-					RewardManager.ProcessWin(player)
+
+					if not teamsViable then
+						RewardManager.ProcessWin(player)
+					elseif teamWinner == nil then
+						RewardManager.ProcessDeath(player, "Both Teams", "Drew The Round", -1)
+					elseif roster[player] == teamWinner then
+						RewardManager.ProcessWin(player)
+					else
+						RewardManager.ProcessDeath(player, "The Enemy Team", "Lost The Round", -1)
+					end
 				end
 			end
 			SpectateMechanic.Refresh()
@@ -174,6 +268,15 @@ function RoundServer.Init()
 	-- Harvest cell templates from the authored map. Generation itself happens in the
 	-- Intermission step of every round, including the first.
 	MapMechanic.Init()
+
+	RoundRemotes.GetSelectTeamEvent().OnServerEvent:Connect(function(player, teamName)
+		if typeof(teamName) ~= "string" then return end
+		if not table.find(RoundConfig.TeamNames, teamName) then return end
+		-- The pick is final for the round: no switching once you are in it.
+		if player:GetAttribute("IsPlaying") then return end
+
+		player:SetAttribute("Team", teamName)
+	end)
 
 	RoundRemotes.GetMainMenuEvent().OnServerEvent:Connect(function(player)
 		local lobbySpawn = Workspace:FindFirstChild("Spawnlocation")

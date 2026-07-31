@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
 local Items = require(Shared.Modules.Core.Items)
@@ -12,7 +13,9 @@ local lastUsed = {}
 function CombatServer.Init()
 	CombatRemotes.GetToolConnections().OnServerEvent:Connect(function(player, toolName, mousePos)
 		if not player:GetAttribute("IsPlaying") then return end
-		
+		-- Shooting is only legal while the platforms are down.
+		if Workspace:GetAttribute("ArenaPhase") ~= "Shoot" then return end
+
 		local data = Items[toolName]
 		if not data then return end
 		

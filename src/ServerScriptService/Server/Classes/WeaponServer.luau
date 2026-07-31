@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Shared = ReplicatedStorage.Shared
+local RoundConfig = require(Shared.Modules.Core.RoundConfig)
 local PlayerUtil = require(Shared.Modules.Utils.PlayerUtil)
 local RaycastUtil = require(Shared.Modules.Utils.RaycastUtil)
 local RewardManager = require(Shared.Modules.Game.RewardManager)
@@ -21,7 +22,15 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 	local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
 	
 	if not humanoid or humanoid.Health <= 0 then return end
-	
+
+	-- Friendly fire. ProcessDamage is the single funnel for melee and hitscan alike, so
+	-- this one gate covers every weapon. Gated on the mode so FFA is unaffected.
+	local mode = RoundConfig.CurrentMode
+	if mode.TeamBased and not mode.FriendlyFire and sourcePlayer and targetPlayer then
+		local sourceTeam = sourcePlayer:GetAttribute("Team")
+		if sourceTeam and sourceTeam == targetPlayer:GetAttribute("Team") then return end
+	end
+
 	if targetPlayer then
 		if targetPlayer:GetAttribute("IsPlaying") then
 			if humanoid.Health - damage <= 0 then

@@ -8,7 +8,8 @@ local isServer = RunService:IsServer()
 local remoteNames = {
 	ToolConnections = "RemoteEvent",
 	ShowBulletTracer = "RemoteEvent",
-	DamageVFX = "RemoteEvent"
+	DamageVFX = "RemoteEvent",
+	PushRequest = "RemoteEvent"
 }
 
 if isServer then
@@ -32,5 +33,6 @@ end
 function CombatRemotes.GetToolConnections() return getRemote("ToolConnections") end
 function CombatRemotes.GetBulletTracer() return getRemote("ShowBulletTracer") end
 function CombatRemotes.GetDamageVFX() return getRemote("DamageVFX") end
+function CombatRemotes.GetPushRequest() return getRemote("PushRequest") end
 
 return CombatRemotes

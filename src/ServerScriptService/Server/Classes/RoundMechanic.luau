@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
 
 local Shared = ReplicatedStorage.Shared
 local RoundConfig = require(Shared.Modules.Core.RoundConfig)
@@ -15,6 +14,12 @@ local rng = Random.new()
 local RoundMechanic = {}
 RoundMechanic.__index = RoundMechanic
 
+-- Read by PushServer and CombatServer to decide which action is legal right now, and by
+-- PushClient to know when to listen for input. A Workspace attribute replicates for free.
+local PHASE_ATTRIBUTE = "ArenaPhase"
+local PHASE_PUSH = "Push"
+local PHASE_SHOOT = "Shoot"
+
 function RoundMechanic.new(roundServer)
 	local self = setmetatable({}, RoundMechanic)
 	self.janitor = janitor.new()
@@ -25,35 +30,53 @@ end
 function RoundMechanic:Start()
 	local mechanicThread = task.spawn(function()
 		local colors = MapConfig.ColorOrder
+		local phases = RoundConfig.Phases
 		local map = Workspace:FindFirstChild("Map")
+
+		local function inGame()
+			return self.roundServer.CurrentState == RoundConfig.States.InGame
+		end
+
+		-- Counts down a phase a second at a time, bailing early if the round ends.
+		local function hold(seconds)
+			while seconds > 0 and inGame() do
+				task.wait(1)
+				seconds -= 1
+			end
+		end
+
+		local function setPhase(phase)
+			Workspace:SetAttribute(PHASE_ATTRIBUTE, phase)
+
+			if RoundConfig.Push.Debug then
+				print(string.format("[Phase] %s - %s", phase,
+					phase == PHASE_SHOOT and "platforms down, weapons given" or "platforms up, push only"))
+			end
+
+			for _, player in Players:GetPlayers() do
+				if player:GetAttribute("IsPlaying") then
+					if phase == PHASE_SHOOT then
+						PlayerUtil.GiveWeapons(player)
+					else
+						PlayerUtil.RemoveWeapons(player)
+					end
+				end
+			end
+		end
 
 		task.wait(0.25)
 
-		for _, player in Players:GetPlayers() do
-			if player:GetAttribute("IsPlaying") then PlayerUtil.GiveWeapons(player) end
-		end
+		-- The round opens with every platform up, so it opens push-only.
+		setPhase(PHASE_PUSH)
+		RoundRemotes.GetColorEvent():FireAllClients("Next", phases.PushDuration)
+		hold(phases.PushDuration)
 
-		local startTimer = 5
-		RoundRemotes.GetColorEvent():FireAllClients("Next", startTimer)
-		while startTimer > 0 and self.roundServer.CurrentState == RoundConfig.States.InGame do
-			task.wait(1)
-			startTimer -= 1
-		end
-
-		while self.roundServer.CurrentState == RoundConfig.States.InGame do
-			for _, player in Players:GetPlayers() do
-				if player:GetAttribute("IsPlaying") then PlayerUtil.RemoveWeapons(player) end
-			end
-
+		while inGame() do
+			-- Colour is called while the platforms are still up: time to run for it.
 			self.roundServer.CurrentColor = colors[rng:NextInteger(1, #colors)]
-			local colorTimer = 4
-			RoundRemotes.GetColorEvent():FireAllClients(self.roundServer.CurrentColor, colorTimer)
-
-			while colorTimer > 0 and self.roundServer.CurrentState == RoundConfig.States.InGame do
-				task.wait(1)
-				colorTimer -= 1
-			end
-			if self.roundServer.CurrentState ~= RoundConfig.States.InGame then break end
+			RoundRemotes.GetColorEvent():FireAllClients(self.roundServer.CurrentColor, phases.AnnounceDuration)
+			hold(phases.AnnounceDuration)
+			if not inGame() then break end
 
 			local hiddenParts = {}
 			if map then
@@ -74,14 +97,16 @@ function RoundMechanic:Start()
 			end
 
 			-- Players left standing on a hidden cell now fall onto Workspace["hit part"],
-			-- which eliminates them on touch. No raycast sweep needed here.
+			-- which eliminates them on touch.
 			task.wait(0.2)
 
-			local hideTimer = 8
-			while hideTimer > 0 and self.roundServer.CurrentState == RoundConfig.States.InGame do
-				task.wait(1)
-				hideTimer -= 1
-			end
+			-- Platforms are gone, so this is the only window where weapons exist.
+			setPhase(PHASE_SHOOT)
+			hold(phases.HiddenDuration)
+
+			-- Weapons go away before the platforms come back, so there is no interleaving
+			-- where a player is holding a gun with every platform up.
+			setPhase(PHASE_PUSH)
 
 			for _, data in ipairs(hiddenParts) do
 				if data.obj and data.obj.Parent then
@@ -92,26 +117,28 @@ function RoundMechanic:Start()
 				end
 			end
 
-			if self.roundServer.CurrentState ~= RoundConfig.States.InGame then break end
+			if not inGame() then break end
 
-			for _, player in Players:GetPlayers() do
-				if player:GetAttribute("IsPlaying") then PlayerUtil.GiveWeapons(player) end
-			end
-
-			local ffaTimer = 10
-			RoundRemotes.GetColorEvent():FireAllClients("Next", ffaTimer)
-			while ffaTimer > 0 and self.roundServer.CurrentState == RoundConfig.States.InGame do
-				task.wait(1)
-				ffaTimer -= 1
-			end
+			RoundRemotes.GetColorEvent():FireAllClients("Next", phases.PushDuration)
+			hold(phases.PushDuration)
 		end
 	end)
 
-	self.janitor:Add(function() task.cancel(mechanicThread) end)
+	self.janitor:Add(function()
+		if coroutine.status(mechanicThread) ~= "dead" then
+			task.cancel(mechanicThread)
+		end
+	end)
 end
 
 function RoundMechanic:Stop()
 	self.janitor:Cleanup()
+
+	Workspace:SetAttribute(PHASE_ATTRIBUTE, nil)
+
+	for _, player in Players:GetPlayers() do
+		PlayerUtil.RemoveWeapons(player)
+	end
 
 	local map = Workspace:FindFirstChild("Map")
 	if map then
@@ -121,7 +148,7 @@ function RoundMechanic:Stop()
 					part.Transparency = 0
 					part.CanCollide = true
 				elseif part:IsA("Texture") or part:IsA("Decal") then
-					part.Transparency = 0.95
+					part.Transparency = 0.9
 				end
 			end
 		end

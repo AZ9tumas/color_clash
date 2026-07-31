@@ -152,6 +152,30 @@ function MapMechanic.Generate()
 		return false
 	end
 
+	-- Validate the templates BEFORE destroying anything, so a missing or detached folder
+	-- can never leave the arena torn down. Re-harvest from the live map if needed.
+	local usable = {}
+	if templateFolder and templateFolder.Parent then
+		for _, name in variantNames do
+			local template = templateFolder:FindFirstChild(name)
+			if template then table.insert(usable, template) end
+		end
+	end
+
+	if #usable == 0 then
+		warn("[Map] template folder is empty or detached, re-harvesting")
+		if not MapMechanic.Init() then return false end
+		for _, name in variantNames do
+			local template = templateFolder:FindFirstChild(name)
+			if template then table.insert(usable, template) end
+		end
+	end
+
+	if #usable == 0 then
+		warn("[Map] still no usable templates, skipping regeneration")
+		return false
+	end
+
 	local rows, cols = MapConfig.Rows, MapConfig.Cols
 	if rows < 1 or cols < 1 then
 		warn("[Map] MapConfig.Rows/Cols must be at least 1, skipping regeneration")
@@ -182,9 +206,7 @@ function MapMechanic.Generate()
 	for r = 1, rows do
 		for c = 1, cols do
 			local colorName = grid[r][c]
-			local variant = variantNames[rng:NextInteger(1, #variantNames)]
-
-			local clone = templateFolder[variant]:Clone()
+			local clone = usable[rng:NextInteger(1, #usable)]:Clone()
 
 			local tint = MapConfig.Colors[colorName]
 			for _, d in clone:GetDescendants() do

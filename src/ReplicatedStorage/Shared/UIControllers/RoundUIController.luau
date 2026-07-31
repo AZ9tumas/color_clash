@@ -152,7 +152,7 @@ function RoundUIController.Init()
 	UIAnimations.InitializePopObject(ButtonsHolder)
 	TopFrame.Visible = false
 
-	local modeNames = {"FFA"}
+	local modeNames = {"FFA", "Teams"}
 	local framesToMap = {MainFrames:FindFirstChild("1"), MainFrames:FindFirstChild("2"), MainFrames:FindFirstChild("3")}
 
 	for i, frame in ipairs(framesToMap) do
@@ -232,6 +232,14 @@ function RoundUIController.Init()
 				if oldState == RoundConfig.States.Voting then UIAnimations.PopOut(ButtonsHolder)
 				elseif oldState ~= RoundConfig.States.PostRound then UIAnimations.PopInFromTop(Message) end
 				Message.Text = "Intermission: " .. tostring(timeLeft) .. "s"
+				Message.TextColor3 = Color3.new(1, 1, 1)
+			end
+
+		elseif newState == RoundConfig.States.TeamSelect then
+			if not inMenu then
+				if oldState == RoundConfig.States.Voting then UIAnimations.PopOut(ButtonsHolder)
+				elseif oldState ~= RoundConfig.States.TeamSelect then UIAnimations.PopInFromTop(Message) end
+				Message.Text = "Pick a team to play: " .. tostring(timeLeft) .. "s"
 				Message.TextColor3 = Color3.new(1, 1, 1)
 			end
 
