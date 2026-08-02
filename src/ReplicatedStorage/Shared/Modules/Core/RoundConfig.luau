@@ -30,6 +30,16 @@ RoundConfig.Modes = {
 -- replicates, so clients can read team membership without a remote.
 RoundConfig.TeamNames = { "Red", "Blue" }
 
+-- Which half of MainHUD.Top each team occupies, and the colour used for that side's
+-- stroke plus the in-world character highlights. Shared so the scoreboard and the
+-- highlights can never disagree about which colour means which team.
+RoundConfig.TeamSides = { Red = "Left", Blue = "Right" }
+
+RoundConfig.TeamColors = {
+	Red = Color3.fromRGB(196, 40, 28),
+	Blue = Color3.fromRGB(13, 105, 172),
+}
+
 -- How long the team picker stays up after voting, in TeamBased modes only. Players who
 -- do not pick within the window sit the round out in the lobby.
 RoundConfig.TeamSelectDuration = 10
@@ -55,5 +65,13 @@ RoundConfig.Push = {
 
 RoundConfig.VotingDuration = 10
 RoundConfig.CurrentMode = RoundConfig.Modes.FFA
+
+-- CurrentMode is only ever assigned on the server, and module state does not replicate,
+-- so a client reading it directly would always see FFA. RoundServer mirrors the active
+-- mode onto a Workspace attribute, which does replicate; read it through here.
+function RoundConfig.GetActiveMode()
+	local name = workspace:GetAttribute("RoundMode")
+	return (name and RoundConfig.Modes[name]) or RoundConfig.CurrentMode
+end
 
 return RoundConfig

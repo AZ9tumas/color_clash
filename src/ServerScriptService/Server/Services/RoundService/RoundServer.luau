@@ -16,6 +16,8 @@ local SpectateMechanic = require(ServerScriptService.Server.Classes.SpectateMech
 local HitPartMechanic = require(ServerScriptService.Server.Classes.HitPartMechanic)
 local MapMechanic = require(ServerScriptService.Server.Classes.MapMechanic)
 
+local rng = Random.new()
+
 local RoundServer = {}
 RoundServer.StateChanged = signal.new()
 RoundServer.CurrentState = RoundConfig.States.WaitingForPlayers
@@ -31,11 +33,48 @@ local function setState(newState, time)
 	RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft)
 end
 
+-- Mirrors the active mode onto a Workspace attribute so clients can read it; module
+-- state set here would never reach them. Paired with RoundConfig.GetActiveMode().
+local function setMode(mode)
+	RoundConfig.CurrentMode = mode
+	Workspace:SetAttribute("RoundMode", mode.Name)
+end
+
 -- Wiped before every selection window so players re-pick each round rather than being
 -- silently carried over on last round's side.
 local function clearTeams()
 	for _, p in Players:GetPlayers() do
 		p:SetAttribute("Team", nil)
+	end
+end
+
+-- Everyone in the lobby who sat out the selection window still gets a side: the smallest
+-- team, picked at random among ties. Letting them sit the round out instead meant a single
+-- player could take an uncontested round and farm the first-place payout.
+local function assignMissingTeams()
+	local counts = {}
+	for _, name in RoundConfig.TeamNames do counts[name] = 0 end
+	for _, p in Players:GetPlayers() do
+		local team = p:GetAttribute("Team")
+		if counts[team] then counts[team] += 1 end
+	end
+
+	for _, p in Players:GetPlayers() do
+		if p:GetAttribute("InMenu") == false and not counts[p:GetAttribute("Team")] then
+			local smallest, lowest = {}, math.huge
+			for _, name in RoundConfig.TeamNames do
+				if counts[name] < lowest then
+					lowest = counts[name]
+					smallest = { name }
+				elseif counts[name] == lowest then
+					table.insert(smallest, name)
+				end
+			end
+
+			local chosen = smallest[rng:NextInteger(1, #smallest)]
+			p:SetAttribute("Team", chosen)
+			counts[chosen] += 1
+		end
 	end
 end
 
@@ -90,7 +129,7 @@ local function startRoundLoop()
 			
 			while RoundServer.TimeLeft > 0 do task.wait(1); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
 
-			RoundConfig.CurrentMode = VotingManager.GetWinner(defaultMode)
+			setMode(VotingManager.GetWinner(defaultMode))
 
 			-- Team modes get a selection window between voting and intermission. Picking a
 			-- side is what buys you into the round; anyone who does not pick sits it out in
@@ -116,6 +155,8 @@ local function startRoundLoop()
 			while RoundServer.TimeLeft > 0 do task.wait(1); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
 
 			local mode = RoundConfig.CurrentMode
+			if mode.TeamBased then assignMissingTeams() end
+
 			local gameSpawn = Workspace:FindFirstChild("Game")
 			local roster = {}
 
@@ -166,6 +207,9 @@ local function startRoundLoop()
 
 			local teamWinner = teamsViable and resolveTeamWinner(roster, wipedOutWinner) or nil
 
+			-- A team round that never managed to field both sides is a no contest.
+			local noContest = mode.TeamBased and not teamsViable
+
 			local lobbySpawn = Workspace:FindFirstChild("Spawnlocation")
 			for _, player in Players:GetPlayers() do
 				if player:GetAttribute("IsPlaying") then
@@ -177,7 +221,12 @@ local function startRoundLoop()
 					end
 					PlayerUtil.TeleportEntity(player.Character, lobbySpawn)
 
-					if not teamsViable then
+					if noContest then
+						-- Both sides were never fielded, so nothing was actually won. Pay
+						-- nothing at all: ProcessDeath is not a safe alternative here,
+						-- because with nobody else alive it resolves to placement 1 and
+						-- pays the top reward, which is the farm we are closing.
+					elseif not mode.TeamBased then
 						RewardManager.ProcessWin(player)
 					elseif teamWinner == nil then
 						RewardManager.ProcessDeath(player, "Both Teams", "Drew The Round", -1)
@@ -193,7 +242,7 @@ local function startRoundLoop()
 			roundMechanic:Stop()
 			setState(RoundConfig.States.InGame, 0)
 			task.wait(2)
-			RoundConfig.CurrentMode = RoundConfig.Modes.FFA
+			setMode(RoundConfig.Modes.FFA)
 		end
 	end)
 end
@@ -269,11 +318,30 @@ function RoundServer.Init()
 	-- Intermission step of every round, including the first.
 	MapMechanic.Init()
 
+	-- Publish the starting mode so clients are never reading a stale attribute.
+	setMode(RoundConfig.CurrentMode)
+
 	RoundRemotes.GetSelectTeamEvent().OnServerEvent:Connect(function(player, teamName)
 		if typeof(teamName) ~= "string" then return end
 		if not table.find(RoundConfig.TeamNames, teamName) then return end
 		-- The pick is final for the round: no switching once you are in it.
 		if player:GetAttribute("IsPlaying") then return end
+
+		-- You may only join a side that is not already the larger one. When the sides are
+		-- level both qualify, so the choice is free. Anything else is dropped silently.
+		-- The requester's own current pick is excluded, so changing your mind still works.
+		local counts = {}
+		for _, name in RoundConfig.TeamNames do counts[name] = 0 end
+		for _, other in Players:GetPlayers() do
+			if other ~= player then
+				local team = other:GetAttribute("Team")
+				if counts[team] then counts[team] += 1 end
+			end
+		end
+
+		local lowest = math.huge
+		for _, name in RoundConfig.TeamNames do lowest = math.min(lowest, counts[name]) end
+		if counts[teamName] > lowest then return end
 
 		player:SetAttribute("Team", teamName)
 	end)

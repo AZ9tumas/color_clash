@@ -48,24 +48,40 @@ local function resolve()
 	return bound[gui] or bind(gui)
 end
 
--- Team membership is a replicated attribute, so live counts need no remote. The side the
--- local player picked is marked so the choice reads back clearly.
+local LOCKED_COLOR = Color3.fromRGB(120, 120, 120)
+local OPEN_COLOR = Color3.fromRGB(255, 255, 255)
+
+-- Team membership is a replicated attribute, so live counts need no remote. The same
+-- balance rule the server enforces is mirrored here purely so a locked side reads as
+-- locked: the server drops the request either way, this just stops it looking broken.
 local function refreshLabels()
 	local entry = resolve()
 	if not entry then return end
 
-	local counts = {}
-	for _, name in RoundConfig.TeamNames do counts[name] = 0 end
+	local counts, excludingMe = {}, {}
+	for _, name in RoundConfig.TeamNames do
+		counts[name] = 0
+		excludingMe[name] = 0
+	end
+
 	for _, p in Players:GetPlayers() do
 		local team = p:GetAttribute("Team")
-		if counts[team] then counts[team] += 1 end
+		if counts[team] then
+			counts[team] += 1
+			if p ~= player then excludingMe[team] += 1 end
+		end
 	end
+
+	local lowest = math.huge
+	for _, name in RoundConfig.TeamNames do lowest = math.min(lowest, excludingMe[name]) end
 
 	local mine = player:GetAttribute("Team")
 	for name, label in pairs(entry.labels) do
 		if label then
+			local locked = excludingMe[name] > lowest
 			label.Text = string.format("%s (%d)%s", string.upper(name), counts[name] or 0,
 				mine == name and " ✓" or "")
+			label.TextColor3 = locked and LOCKED_COLOR or OPEN_COLOR
 		end
 	end
 end

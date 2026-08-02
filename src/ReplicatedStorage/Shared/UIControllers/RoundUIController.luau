@@ -31,42 +31,97 @@ local activeFrames = {}
 local originalButtonPositions = {}
 local hasPlayedVotingAnim = false
 
+local LEFT_SLOTS = {"1", "2", "3", "4"}
+local RIGHT_SLOTS = {"5", "6", "7", "8"}
+
+local function fillSide(sideFrame, slotNames, entries)
+	for i, slotName in ipairs(slotNames) do
+		local slotFrame = sideFrame:FindFirstChild(slotName)
+		local btn = slotFrame and slotFrame:FindFirstChild("btn")
+		if btn then
+			local entry = entries[i]
+			if entry then
+				btn.Avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(entry.UserId) .. "&w=150&h=150"
+				btn.Kills.Text = tostring(entry.Kills)
+				btn.Rank.Text = "#" .. tostring(i)
+				btn.Avatar.Visible = true; btn.Kills.Visible = true; btn.Rank.Visible = true
+			else
+				btn.Avatar.Visible = false; btn.Kills.Visible = false; btn.Rank.Visible = false
+			end
+		end
+	end
+end
+
+-- Tints each side's existing UIStroke so it reads as that team's half of the board.
+local function paintSide(sideFrame, color)
+	local stroke = sideFrame:FindFirstChildOfClass("UIStroke")
+	if stroke then
+		stroke.Color = color or Color3.fromRGB(255, 255, 255)
+	end
+end
+
 local function UpdateTopBar()
 	local entities = {}
 	for _, p in Players:GetPlayers() do
 		if p:GetAttribute("InMenu") == false and p:GetAttribute("IsPlaying") == true then
-			table.insert(entities, {Name = p.Name, Kills = p:GetAttribute("Kills") or 0, UserId = p.UserId})
+			table.insert(entities, {
+				Name = p.Name,
+				Kills = p:GetAttribute("Kills") or 0,
+				UserId = p.UserId,
+				Team = p:GetAttribute("Team"),
+			})
 		end
 	end
-	
+
 	local workspaceObjs = Workspace:GetChildren()
 	for _, bot in ipairs(workspaceObjs) do
 		if string.match(bot.Name, "^Bot_") and bot:FindFirstChild("Humanoid") and bot.Humanoid.Health > 0 then
 			table.insert(entities, {Name = "Robot_" .. bot.Name:sub(5), Kills = bot:GetAttribute("Kills") or 0, UserId = 1})
 		end
 	end
-	
+
 	table.sort(entities, function(a, b) return a.Kills > b.Kills end)
 
-	local slots = {
-		TopLeft:FindFirstChild("1"), TopLeft:FindFirstChild("2"), TopLeft:FindFirstChild("3"), TopLeft:FindFirstChild("4"),
-		TopRight:FindFirstChild("5"), TopRight:FindFirstChild("6"), TopRight:FindFirstChild("7"), TopRight:FindFirstChild("8")
-	}
+	local mode = RoundConfig.GetActiveMode()
+	if mode and mode.TeamBased then
+		-- One team per side, each ranked within itself.
+		local perTeam = {}
+		for _, name in RoundConfig.TeamNames do perTeam[name] = {} end
+		for _, entry in entities do
+			local bucket = entry.Team and perTeam[entry.Team]
+			if bucket then table.insert(bucket, entry) end
+		end
 
-	for i, slotFrame in ipairs(slots) do
-		if slotFrame and slotFrame:IsA("Frame") then
-			local btn = slotFrame:FindFirstChild("btn")
-			if btn then
-				local p = entities[i]
-				if p then
-					btn.Avatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(p.UserId) .. "&w=150&h=150"
-					btn.Kills.Text = tostring(p.Kills)
-					btn.Rank.Text = "#" .. tostring(i)
-					btn.Avatar.Visible = true; btn.Kills.Visible = true; btn.Rank.Visible = true
-				else
-					btn.Avatar.Visible = false; btn.Kills.Visible = false; btn.Rank.Visible = false
-				end
+		local leftTeam, rightTeam
+		for teamName, side in pairs(RoundConfig.TeamSides) do
+			if side == "Left" then leftTeam = teamName elseif side == "Right" then rightTeam = teamName end
+		end
+
+		fillSide(TopLeft, LEFT_SLOTS, leftTeam and perTeam[leftTeam] or {})
+		fillSide(TopRight, RIGHT_SLOTS, rightTeam and perTeam[rightTeam] or {})
+		paintSide(TopLeft, leftTeam and RoundConfig.TeamColors[leftTeam])
+		paintSide(TopRight, rightTeam and RoundConfig.TeamColors[rightTeam])
+	else
+		-- FFA keeps the original behaviour: one ranked list flowing across both sides.
+		local left, right = {}, {}
+		for i, entry in entities do
+			if i <= #LEFT_SLOTS then
+				table.insert(left, entry)
+			elseif i <= #LEFT_SLOTS + #RIGHT_SLOTS then
+				table.insert(right, entry)
 			end
+		end
+
+		fillSide(TopLeft, LEFT_SLOTS, left)
+		fillSide(TopRight, RIGHT_SLOTS, right)
+		paintSide(TopLeft, nil)
+		paintSide(TopRight, nil)
+
+		-- Ranks must keep counting across the divide, so relabel the right-hand side.
+		for i, slotName in ipairs(RIGHT_SLOTS) do
+			local slotFrame = TopRight:FindFirstChild(slotName)
+			local btn = slotFrame and slotFrame:FindFirstChild("btn")
+			if btn and right[i] then btn.Rank.Text = "#" .. tostring(i + #LEFT_SLOTS) end
 		end
 	end
 end

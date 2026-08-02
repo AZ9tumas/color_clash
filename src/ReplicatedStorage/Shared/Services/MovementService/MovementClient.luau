@@ -31,6 +31,9 @@ local climbEndTime = 0
 
 local isVaulting = false
 
+local airSpeed = nil
+local wasGrounded = true
+
 local lastGroundJumpTime = 0
 local lastWallJumpTime = 0
 local WALL_JUMP_COOLDOWN = 0.6
@@ -128,23 +131,74 @@ local function stopAllTracks()
 	end
 end
 
+local function airOptions()
+	if type(MovementConfig) == "table" and type(MovementConfig.Air) == "table" then
+		return MovementConfig.Air
+	end
+	return {}
+end
+
+local function groundSpeedForState()
+	if currentState == "Sprint" then return configVal("Speeds", "Sprint", 34) end
+	if string.find(currentState, "WallRun") then return configVal("Speeds", "WallRun", 45) end
+	return configVal("Speeds", "Walk", 22)
+end
+
+-- Single place WalkSpeed is written. While airSpeed is set it wins over the ground speed,
+-- which is what keeps momentum alive across the Sprint/Walk transitions that fire
+-- constantly from the MoveDirection handler.
+local function applyMoveSpeed()
+	if not hum then return end
+
+	local speed = airSpeed or groundSpeedForState()
+	hum.WalkSpeed = speed
+
+	local remoteState = string.find(currentState, "WallRun") and "WallRun" or currentState
+	MovementRemotes.GetUpdateStateEvent():FireServer(remoteState, speed)
+end
+
+local function horizontalSpeed()
+	if not root then return 0 end
+	local v = root.AssemblyLinearVelocity
+	return Vector3.new(v.X, 0, v.Z).Magnitude
+end
+
+-- Roblox drives horizontal velocity toward MoveDirection * WalkSpeed even in mid-air, so
+-- anything faster than WalkSpeed is braked away the moment you leave the ground. Raising
+-- WalkSpeed to the launch speed is what converts a fast approach into actual distance.
+local function beginAirMomentum(fromSpeed)
+	if airOptions().PreserveMomentum == false then return end
+
+	local retention = configVal("Air", "MomentumRetention", 1)
+	local minSpeed = configVal("Air", "MinAirSpeed", configVal("Speeds", "Sprint", 34))
+	local maxSpeed = configVal("Air", "MaxAirSpeed", 120)
+
+	airSpeed = math.clamp((fromSpeed or horizontalSpeed()) * retention, minSpeed, maxSpeed)
+	applyMoveSpeed()
+end
+
+local function endAirMomentum()
+	if airSpeed == nil then return end
+	airSpeed = nil
+	applyMoveSpeed()
+end
+
 local function setState(newState)
 	if currentState == newState then return end
 	currentState = newState
 	player:SetAttribute("MovementState", newState)
 
-	local remoteState = string.find(newState, "WallRun") and "WallRun" or newState
-	MovementRemotes.GetUpdateStateEvent():FireServer(remoteState)
+	-- Wall running drives its own speed, so any carried momentum ends here.
+	if string.find(newState, "WallRun") then airSpeed = nil end
+
+	applyMoveSpeed()
 
 	if hum then
 		if newState == "Sprint" then
-			hum.WalkSpeed = configVal("Speeds", "Sprint", 34)
 			playTrack("Sprint")
 		elseif newState == "Walk" then
-			hum.WalkSpeed = configVal("Speeds", "Walk", 22)
 			if not isWallRunning and not isSliding and not isWallClimbing and not isVaulting then stopAllTracks() end
 		elseif string.find(newState, "WallRun") then
-			hum.WalkSpeed = configVal("Speeds", "WallRun", 45)
 			playTrack(newState)
 		elseif newState == "WallClimb" then
 			playTrack("WallClimb")
@@ -319,6 +373,12 @@ stopWallRun = function()
 	else
 		setState("Walk")
 	end
+
+	-- Running out of wall mid-air keeps the speed built up on it, rather than dropping to
+	-- sprint pace. setState above cleared airSpeed, so this has to come after it.
+	if hum and hum.FloorMaterial == Enum.Material.Air then
+		beginAirMomentum()
+	end
 end
 
 local function measureWallHeight(hitPosition, hitNormal, raycastParams)
@@ -348,6 +408,10 @@ function MovementClient.Init()
 			local lowerTorso = char:WaitForChild("LowerTorso", 3)
 			if lowerTorso then rootJoint = lowerTorso:FindFirstChild("Root") end
 		end
+
+		-- Fresh character: drop any momentum carried from the previous one.
+		airSpeed = nil
+		wasGrounded = true
 
 		hum.WalkSpeed = configVal("Speeds", "Walk", 22)
 		-- The place runs on JumpHeight, not JumpPower. Launch velocity is derived from
@@ -399,6 +463,7 @@ function MovementClient.Init()
 	player:GetAttributeChangedSignal("IsPlaying"):Connect(function()
 		if player:GetAttribute("IsPlaying") ~= true then
 			wantsToSprint = false
+			endAirMomentum()
 			if activeSlideVel then activeSlideVel:Destroy() end
 			isSliding = false
 			stopWallRun()
@@ -452,6 +517,7 @@ function MovementClient.Init()
 			local jumpOffForce = configVal("WallClimb", "JumpOffForce", 45)
 			local jumpUpForce = configVal("WallClimb", "JumpUpForce", 65)
 			root.AssemblyLinearVelocity = (climbNormal * jumpOffForce) + Vector3.new(0, jumpUpForce, 0)
+			beginAirMomentum(Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude)
 			lastWallJumpTime = tick()
 			jumpsLeft = 1
 			
@@ -483,6 +549,7 @@ function MovementClient.Init()
 
 				stopWallRun()
 				root.AssemblyLinearVelocity = parallelVelocity + jumpVector
+				beginAirMomentum(Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude)
 				lastWallJumpTime = tick()
 				jumpsLeft = 1
 
@@ -494,9 +561,21 @@ function MovementClient.Init()
 				end
 			end
 		elseif isSliding then
+			-- Slide jump: the whole point of the slide is that jumping out of it launches
+			-- you. Capture the slide velocity before tearing the constraint down, then
+			-- carry it into the air instead of dropping back to sprint speed.
+			local slideVelocity = activeSlideVel and activeSlideVel.VectorVelocity or root.AssemblyLinearVelocity
+
 			if activeSlideVel then activeSlideVel:Destroy() end
+			activeSlideVel = nil
 			isSliding = false
 			stopAllTracks()
+
+			local flat = Vector3.new(slideVelocity.X, 0, slideVelocity.Z)
+			if flat.Magnitude > 0.1 then
+				root.AssemblyLinearVelocity = Vector3.new(flat.X, root.AssemblyLinearVelocity.Y, flat.Z)
+				beginAirMomentum(flat.Magnitude)
+			end
 
 			if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
 				wantsToSprint = true
@@ -548,6 +627,18 @@ function MovementClient.Init()
 
 		if hum.Health <= 0 then return end
 		if char and char:GetAttribute("Ragdolled") then return end
+
+		-- Capture speed the frame we leave the ground, release it the frame we land.
+		-- Wall states drive their own speed, so they opt out.
+		local grounded = hum.FloorMaterial ~= Enum.Material.Air
+		if grounded ~= wasGrounded then
+			wasGrounded = grounded
+			if grounded then
+				endAirMomentum()
+			elseif airSpeed == nil and not isWallRunning and not isWallClimbing and not isVaulting then
+				beginAirMomentum()
+			end
+		end
 
 		if player:GetAttribute("IsPlaying") ~= true then
 			if isWallRunning then stopWallRun() end

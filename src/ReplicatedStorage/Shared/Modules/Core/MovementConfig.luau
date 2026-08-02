@@ -1,41 +1,49 @@
 local MovementConfig = {
-	-- Floaty air. A VectorForce cancels part of world gravity while airborne, and every
-	-- upward impulse below is scaled by sqrt(GravityScale) so peak heights stay put.
-	-- Net effect: the same jump height, but a longer hang and more reach.
+	-- Momentum-based air movement. Two things working together:
 	--
-	-- Measured in-engine, not predicted. Note the effective scale lands above the value
-	-- set here: the applied force is exactly right for 0.55, but roughly 16% of it is
-	-- absorbed by the solver, so treat GravityScale as a dial to tune by feel, not a
-	-- literal multiplier.
+	-- 1. A VectorForce cancels part of world gravity while airborne, so jumps hang.
+	-- 2. WalkSpeed is raised to your launch speed while airborne. This is the important
+	--    one. Roblox drives horizontal velocity toward MoveDirection * WalkSpeed even in
+	--    mid-air, so without it a 130 stud/s slide collapses to walking pace the instant
+	--    you leave the ground, and no amount of hang time buys you distance.
 	--
-	--                        before      after
-	--   effective gravity    196.2       122.3   (0.623x, from a 0.55 setting)
-	--   jump apex            7.20        7.13    studs, deliberately unchanged
-	--   hang time            0.542       0.683   s
-	--   reach at sprint 34   18.4        23.2    studs, +26%
+	-- GravityScale is a feel dial, not a literal multiplier: the force applied is exactly
+	-- right on paper, but roughly 16% is absorbed by the solver. Measured at the previous
+	-- 0.55 setting the real figure was 0.623, i.e. effective = 1 - 0.84 * (1 - setting).
 	--
-	-- Lower GravityScale for more glide, raise it toward 1 to go back to snappy. If you
-	-- change it, move JumpHeight with it or the apex drifts: apex ~= JumpHeight / effective.
+	--                          old      measured 0.55    projected at 0.40
+	--   effective gravity      196.2    122.3            ~97.5
+	--   jump apex              7.20     7.13             ~7.2   studs
+	--   hang time              0.542    0.683            ~0.77  s
+	--   reach at sprint        18.4     23.2             ~31    studs
+	--   reach off a full slide  n/a     n/a              ~85    studs (two map cells)
+	--
+	-- Set PreserveMomentum = false to fall back to stock Roblox air control.
 	Air = {
-		GravityScale = 0.55,
-		JumpHeight = 3.9
+		GravityScale = 0.40,
+		JumpHeight = 3.6,
+		PreserveMomentum = true,
+		MomentumRetention = 1.0, -- fraction of launch speed carried into the air
+		MinAirSpeed = 40, -- never slower in the air than a sprint
+		MaxAirSpeed = 110 -- ceiling, and the server's anti-exploit clamp
 	},
 	Speeds = {
-		Walk = 22,
-		Sprint = 34,
-		WallRun = 45,
-		DoubleJumpPower = 33 -- 45 * sqrt(0.55), keeps the double jump's old peak
+		Walk = 24,
+		Sprint = 40,
+		WallRun = 55,
+		DoubleJumpPower = 29 -- rescaled so peak height survives the lower gravity
 	},
+	-- Slides are the main traversal tool: build speed on the ground, jump, keep it.
 	Slide = {
-		Cooldown = 0.3,
-		Duration = 0.9,
-		BasePower = 80,
-		SprintPower = 110
+		Cooldown = 0.25,
+		Duration = 1.0,
+		BasePower = 100,
+		SprintPower = 130
 	},
 	WallRun = {
 		GravityScale = 0.1,
 		MinHeight = 2.0,
-		JumpHeight = 41, -- 55 * sqrt(0.55)
+		JumpHeight = 37, -- rescaled for the lower gravity
 		ForwardRestrictionDot = -0.9,
 		JumpOffForce = 50,
 		MaxForce = 90,
@@ -45,7 +53,7 @@ local MovementConfig = {
 		Speed = 45,
 		Duration = 0.45,
 		JumpOffForce = 45,
-		JumpUpForce = 48, -- 65 * sqrt(0.55); was hardcoded in MovementClient
+		JumpUpForce = 43, -- rescaled for the lower gravity; was hardcoded in MovementClient
 		MaxHeight = 12
 	},
 	Vault = {
