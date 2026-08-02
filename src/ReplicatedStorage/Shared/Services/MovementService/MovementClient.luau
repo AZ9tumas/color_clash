@@ -350,6 +350,11 @@ function MovementClient.Init()
 		end
 
 		hum.WalkSpeed = configVal("Speeds", "Walk", 22)
+		-- The place runs on JumpHeight, not JumpPower. Launch velocity is derived from
+		-- JumpHeight against full world gravity, so this has to shrink in step with
+		-- Air.GravityScale or the reduced gravity would send the apex up instead.
+		hum.UseJumpPower = false
+		hum.JumpHeight = configVal("Air", "JumpHeight", 7.2)
 		loadTracks()
 
 		local rootAtt = root:FindFirstChild("RootRigAttachment") or root:FindFirstChild("RootAttachment")
@@ -445,7 +450,8 @@ function MovementClient.Init()
 		if isWallClimbing and climbNormal then
 			stopWallClimb()
 			local jumpOffForce = configVal("WallClimb", "JumpOffForce", 45)
-			root.AssemblyLinearVelocity = (climbNormal * jumpOffForce) + Vector3.new(0, 65, 0)
+			local jumpUpForce = configVal("WallClimb", "JumpUpForce", 65)
+			root.AssemblyLinearVelocity = (climbNormal * jumpOffForce) + Vector3.new(0, jumpUpForce, 0)
 			lastWallJumpTime = tick()
 			jumpsLeft = 1
 			
@@ -517,13 +523,32 @@ function MovementClient.Init()
 
 	RunService.Heartbeat:Connect(function()
 		if not hum or not root then return end
+
+		-- Airborne gravity scaling. Resolved first, ahead of every early return below, so a
+		-- player who ragdolls or dies mid-air cannot keep a stale upward force and float.
+		-- Applies in the lobby too, so movement feels identical there and in the arena.
+		-- The wall-run branch further down overrides this with its own stronger scale.
+		if counterGravity and not isWallRunning then
+			-- Humanoid state, not FloorMaterial: FloorMaterial lags roughly 0.07s behind a
+			-- jump, and the velocity bled at full gravity during that window costs about a
+			-- quarter of the apex. State flips to Jumping on the launch frame.
+			local state = hum:GetState()
+			local airborne = (state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping)
+				and hum.Health > 0
+				and not (char and char:GetAttribute("Ragdolled"))
+				and not isSliding and not isVaulting and not isWallClimbing
+
+			local airScale = configVal("Air", "GravityScale", 1)
+			if airborne and airScale < 1 then
+				counterGravity.Force = Vector3.new(0, Workspace.Gravity * root.AssemblyMass * (1 - airScale), 0)
+			else
+				counterGravity.Force = Vector3.zero
+			end
+		end
+
 		if hum.Health <= 0 then return end
 		if char and char:GetAttribute("Ragdolled") then return end
-		
-		if not isWallRunning and counterGravity then
-			counterGravity.Force = Vector3.zero
-		end
-		
+
 		if player:GetAttribute("IsPlaying") ~= true then
 			if isWallRunning then stopWallRun() end
 			if isWallClimbing then stopWallClimb() end

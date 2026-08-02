@@ -126,7 +126,7 @@ local function startRoundLoop()
 
 				if eligible then
 					player:SetAttribute("IsPlaying", true)
-					PlayerUtil.TeleportEntity(player.Character, gameSpawn)
+					PlayerUtil.TeleportOntoMap(player.Character, gameSpawn)
 					if mode.TeamBased then roster[player] = team end
 				end
 			end

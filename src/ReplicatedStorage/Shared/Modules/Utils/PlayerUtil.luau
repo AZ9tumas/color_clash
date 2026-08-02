@@ -57,6 +57,62 @@ function PlayerUtil.TeleportEntity(entity, targetPart)
 	end
 end
 
+-- How far the root sits above the ground, so a character lands on a surface instead of
+-- half inside it. Mirrors MovementClient's getDistToFloor.
+local function distanceToFloor(entity)
+	local hum = entity:FindFirstChildOfClass("Humanoid")
+	local root = entity:FindFirstChild("HumanoidRootPart")
+	if not hum or not root then return 3 end
+	if hum.RigType == Enum.HumanoidRigType.R6 then return 3 end
+	return hum.HipHeight + (root.Size.Y / 2)
+end
+
+-- Drops the entity onto the arena by raycasting straight down onto the map only, so it
+-- always lands on top of a coloured cell. The old fixed "+5 studs" offset spawned players
+-- inside geometry, because Workspace.Game sits partway up the map's vertical span.
+function PlayerUtil.TeleportOntoMap(entity, targetPart, spread)
+	if not entity or not targetPart then return false end
+
+	local map = workspace:FindFirstChild("Map")
+	if not map then
+		PlayerUtil.TeleportEntity(entity, targetPart)
+		return false
+	end
+
+	spread = spread or 12
+
+	-- Include, not Exclude: only the coloured cells count as ground. Anything else in
+	-- Workspace, props included, is ignored.
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { map }
+
+	local lift = distanceToFloor(entity) + 0.5
+	local origin = targetPart.Position
+
+	-- First attempt is dead centre; the rest scatter so players do not stack up.
+	for attempt = 1, 12 do
+		local offsetX = attempt == 1 and 0 or math.random(-spread, spread)
+		local offsetZ = attempt == 1 and 0 or math.random(-spread, spread)
+		local from = Vector3.new(origin.X + offsetX, origin.Y + 200, origin.Z + offsetZ)
+
+		local hit = workspace:Raycast(from, Vector3.new(0, 500, 0) * -1, params)
+		if hit then
+			entity:PivotTo(CFrame.new(hit.Position + Vector3.new(0, lift, 0)))
+
+			local root = entity:FindFirstChild("HumanoidRootPart")
+			if root then
+				root.AssemblyLinearVelocity = Vector3.zero
+				root.AssemblyAngularVelocity = Vector3.zero
+			end
+			return true
+		end
+	end
+
+	PlayerUtil.TeleportEntity(entity, targetPart)
+	return false
+end
+
 function PlayerUtil.RagdollAndTeleport(player, lobbySpawn, kbVelocity)
 	if not player.Character then return end
 	local char = player.Character
