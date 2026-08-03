@@ -6,6 +6,15 @@ local FXConfig = {}
 -- name in that folder; a missing or blank one is skipped rather than erroring.
 FXConfig.SoundFolder = "GameSounds"
 
+-- Global button audio, applied through UIAnimations.BindButtonAnimations and
+-- MenuController.setupMenuButton, so every interactive button gets it for free.
+FXConfig.UI = {
+	Enabled = true,
+	Click = "UIClick",
+	Hover = "UIHover",
+	HoverScale = 0.5, -- hover ticks sit well under clicks
+}
+
 FXConfig.MuzzleFlash = {
 	Enabled = true,
 	Size = 0.9,
@@ -36,6 +45,17 @@ FXConfig.Land = {
 	-- Downward speed needed before a landing counts. Without this every kerb step and
 	-- every slope thuds, which gets grating fast now that air time is longer.
 	MinFallSpeed = 45,
+	DustParticles = 12,
+	DustColor = Color3.fromRGB(225, 225, 215),
+}
+
+-- Trail behind fast-moving characters: reads as speed for slides, slide jumps and wall
+-- runs, which is most of what the momentum system produces.
+FXConfig.SpeedTrail = {
+	Enabled = true,
+	MinSpeed = 50, -- studs/s of horizontal speed before the trail shows
+	Color = Color3.fromRGB(160, 225, 255),
+	Lifetime = 0.25,
 }
 
 FXConfig.Slide = {

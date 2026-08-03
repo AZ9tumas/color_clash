@@ -48,9 +48,13 @@ local function setupMenuButton(frame, unselectedSize, selectedSize, pos)
 	title.TextColor3 = colorNormal
 
 	btn.MouseEnter:Connect(function()
+		UIAnimations.PlayHover()
 		TweenService:Create(titleFrame, hoverInfo, {Size = selectedSize, BackgroundColor3 = colorHover}):Play()
 		TweenService:Create(title, hoverInfo, {TextColor3 = colorHover}):Play()
 	end)
+
+	-- Menu buttons bypass BindButtonAnimations, so the click sound is added here.
+	btn.MouseButton1Click:Connect(UIAnimations.PlayClick)
 
 	btn.MouseLeave:Connect(function()
 		TweenService:Create(titleFrame, hoverInfo, {Size = unselectedSize, BackgroundColor3 = colorNormal}):Play()

@@ -637,6 +637,14 @@ function MovementClient.Init()
 
 		-- Capture speed the frame we leave the ground, release it the frame we land.
 		-- Wall states drive their own speed, so they opt out.
+		-- Speed trail: purely visual, driven by actual horizontal velocity so it covers
+		-- slides, slide jumps and wall runs without caring which state produced the speed.
+		local speedTrail = FXUtil.EnsureSpeedTrail(root)
+		if speedTrail then
+			speedTrail.Enabled = player:GetAttribute("IsPlaying") == true
+				and horizontalSpeed() >= (FXConfig.SpeedTrail.MinSpeed or 50)
+		end
+
 		local grounded = hum.FloorMaterial ~= Enum.Material.Air
 		if not grounded then
 			-- Track the fastest descent of this fall so the landing sound can be gated on

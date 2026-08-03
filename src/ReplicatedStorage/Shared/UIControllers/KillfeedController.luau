@@ -2,11 +2,14 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
+local SoundService = game:GetService("SoundService")
+
 local Shared = ReplicatedStorage.Shared
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
 local UIAnimations = require(Shared.Modules.Utils.UIAnimations)
 local Typewriter = require(Shared.Modules.Utils.Typewriter)
 local FormatUtil = require(Shared.Modules.Utils.FormatUtil)
+local FXUtil = require(Shared.Modules.Utils.FXUtil)
 
 local KillFeedController = {}
 
@@ -84,6 +87,17 @@ function KillFeedController.Init()
 	end)
 
 	RoundRemotes.GetDeathScreenEvent().OnClientEvent:Connect(function(killerName, weaponName, victimsCount, placement, reward, roundKills)
+		-- The death screen is the one funnel every round outcome passes through, so the
+		-- result stingers live here. -2 is the existing "won the round" sentinel; team
+		-- losses and draws arrive as ProcessDeath with their reason in weaponName.
+		if victimsCount == -2 then
+			FXUtil.PlaySoundAt("Victory", SoundService)
+		elseif weaponName == "Lost The Round" or weaponName == "Drew The Round" then
+			FXUtil.PlaySoundAt("Defeat", SoundService)
+		else
+			FXUtil.PlaySoundAt("Eliminated", SoundService)
+		end
+
 		task.spawn(function()
 			local deathReason = ""
 			if victimsCount == -2 then

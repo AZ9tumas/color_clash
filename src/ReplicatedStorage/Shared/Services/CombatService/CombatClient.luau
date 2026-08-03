@@ -265,6 +265,11 @@ function CombatClient.Init()
 	RoundRemotes.GetKillFeedEvent().OnClientEvent:Connect(function(killerName, victimName)
 		if killerName == player.Name then
 			CrosshairController.ShowHitMarker(3)
+			-- The "Kill Sound Effect" toggle has existed in Settings since day one but was
+			-- never wired to anything; this is its implementation.
+			if SettingsController.GetValue("Kill Sound Effect") then
+				FXUtil.PlaySoundAt("KillStinger", game:GetService("SoundService"))
+			end
 		end
 	end)
 

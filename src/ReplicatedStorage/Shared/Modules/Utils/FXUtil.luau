@@ -82,6 +82,73 @@ function FXUtil.LandImpact(position)
 	local config = FXConfig.Land
 	if not config.Enabled then return end
 	FXUtil.PlaySoundAtPosition(config.Sound, position, config.SoundVolume)
+
+	-- Dust puff kicked out sideways at ground level.
+	if (config.DustParticles or 0) > 0 and position then
+		local emitterPart = makeEffectPart(Enum.PartType.Ball)
+		emitterPart.Transparency = 1
+		emitterPart.Size = Vector3.new(0.5, 0.5, 0.5)
+		emitterPart.CFrame = CFrame.new(position)
+
+		local emitter = Instance.new("ParticleEmitter")
+		emitter.Color = ColorSequence.new(config.DustColor or Color3.new(1, 1, 1))
+		emitter.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.6),
+			NumberSequenceKeypoint.new(1, 1.6),
+		})
+		emitter.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.4),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		emitter.Lifetime = NumberRange.new(0.25, 0.45)
+		emitter.Speed = NumberRange.new(6, 10)
+		emitter.SpreadAngle = Vector2.new(85, 85)
+		emitter.EmissionDirection = Enum.NormalId.Top
+		emitter.Enabled = false
+		emitter.Parent = emitterPart
+
+		emitterPart.Parent = effectsFolder()
+		emitter:Emit(config.DustParticles)
+		Debris:AddItem(emitterPart, 1)
+	end
+end
+
+-- One Trail per character, between two vertical attachments on the root. The caller
+-- toggles .Enabled by speed; recreating per toggle would leak attachments.
+function FXUtil.EnsureSpeedTrail(root)
+	local config = FXConfig.SpeedTrail
+	if not config.Enabled or not root then return nil end
+
+	local existing = root:FindFirstChild("SpeedTrail")
+	if existing then return existing end
+
+	local top = Instance.new("Attachment")
+	top.Name = "SpeedTrailTop"
+	top.Position = Vector3.new(0, 1, 0)
+	top.Parent = root
+
+	local bottom = Instance.new("Attachment")
+	bottom.Name = "SpeedTrailBottom"
+	bottom.Position = Vector3.new(0, -1, 0)
+	bottom.Parent = root
+
+	local trail = Instance.new("Trail")
+	trail.Name = "SpeedTrail"
+	trail.Attachment0 = top
+	trail.Attachment1 = bottom
+	trail.Color = ColorSequence.new(config.Color or Color3.new(1, 1, 1))
+	trail.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.55),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	trail.Lifetime = config.Lifetime or 0.25
+	trail.WidthScale = NumberSequence.new(1)
+	trail.FaceCamera = true
+	trail.LightInfluence = 0
+	trail.Enabled = false
+	trail.Parent = root
+
+	return trail
 end
 
 function FXUtil.SlideStart(part)

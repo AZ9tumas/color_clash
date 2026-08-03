@@ -15,6 +15,7 @@ local RoundMechanic = require(ServerScriptService.Server.Classes.RoundMechanic)
 local SpectateMechanic = require(ServerScriptService.Server.Classes.SpectateMechanic)
 local HitPartMechanic = require(ServerScriptService.Server.Classes.HitPartMechanic)
 local MapMechanic = require(ServerScriptService.Server.Classes.MapMechanic)
+local QuestServer = require(ServerScriptService.Server.Services.QuestService.QuestServer)
 
 local rng = Random.new()
 
@@ -140,19 +141,18 @@ local function startRoundLoop()
 				while RoundServer.TimeLeft > 0 do task.wait(1); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
 			end
 
-			setState(RoundConfig.States.Intermission, RoundConfig.CurrentMode.IntermissionDuration)
-			-- Every round gets a fresh grid. Must run before HitPartMechanic.Build(), which
-			-- measures Workspace.Map to size the pad.
+			-- No intermission: voting (or team select) rolls straight into the round.
+			-- Generation is synchronous and takes well under a second, so nothing needs a
+			-- visible waiting state. Generate must run before HitPartMechanic.Build(),
+			-- which measures Workspace.Map to size the pad.
 			MapMechanic.Generate()
 			HitPartMechanic.Build()
 			for _, player in Players:GetPlayers() do
-				if player:GetAttribute("InMenu") == false then 
-					player:SetAttribute("Kills", 0) 
+				if player:GetAttribute("InMenu") == false then
+					player:SetAttribute("Kills", 0)
 					player:SetAttribute("RoundCash", 0)
 				end
 			end
-
-			while RoundServer.TimeLeft > 0 do task.wait(1); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
 
 			local mode = RoundConfig.CurrentMode
 			if mode.TeamBased then assignMissingTeams() end
@@ -168,6 +168,7 @@ local function startRoundLoop()
 				if eligible then
 					player:SetAttribute("IsPlaying", true)
 					PlayerUtil.TeleportOntoMap(player.Character, gameSpawn)
+					QuestServer.UpdateGamesPlayed(player)
 					if mode.TeamBased then roster[player] = team end
 				end
 			end
@@ -255,6 +256,11 @@ local function bindCharacter(player, char)
 		
 		humanoid.HealthChanged:Connect(function(health)
 			if health <= 0 then
+				-- Already mid-ragdoll (e.g. hit the void during death knockback): the
+				-- existing flight owns recovery. Re-triggering here was one of the two
+				-- paths that froze players after a round.
+				if char:GetAttribute("Ragdolled") then return end
+
 				humanoid.Health = humanoid.MaxHealth
 				local lobbySpawn = Workspace:FindFirstChild("Spawnlocation")
 				
@@ -293,8 +299,13 @@ function RoundServer.Init()
 	end)
 	
 	RoundRemotes.GetResetEvent().OnServerEvent:Connect(function(player)
+		-- Mashing reset during the ragdoll flight was the classic repro for the
+		-- stuck-after-round bug: a second ragdoll on top of the first.
+		local existingChar = player.Character
+		if existingChar and existingChar:GetAttribute("Ragdolled") then return end
+
 		local lobbySpawn = Workspace:FindFirstChild("Spawnlocation")
-		
+
 		if player:GetAttribute("IsPlaying") then
 			player:SetAttribute("IsPlaying", false)
 			
@@ -314,8 +325,8 @@ function RoundServer.Init()
 		end
 	end)
 
-	-- Harvest cell templates from the authored map. Generation itself happens in the
-	-- Intermission step of every round, including the first.
+	-- Harvest cell templates from the authored map. Generation itself happens right
+	-- before every round's teleport, including the first.
 	MapMechanic.Init()
 
 	-- Publish the starting mode so clients are never reading a stale attribute.

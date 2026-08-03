@@ -7,6 +7,7 @@ local Shared = ReplicatedStorage.Shared
 local RoundConfig = require(Shared.Modules.Core.RoundConfig)
 local PlayerUtil = require(Shared.Modules.Utils.PlayerUtil)
 local RaycastUtil = require(Shared.Modules.Utils.RaycastUtil)
+local QuestServer = require(ServerScriptService.Server.Services.QuestService.QuestServer)
 local RewardManager = require(Shared.Modules.Game.RewardManager)
 local CombatRemotes = require(Shared.Remotes.CombatRemotes)
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
@@ -33,6 +34,11 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 
 	if targetPlayer then
 		if targetPlayer:GetAttribute("IsPlaying") then
+			QuestServer.UpdateShotsTaken(targetPlayer)
+			if sourcePlayer and sourcePlayer ~= targetPlayer then
+				QuestServer.UpdateShotsLanded(sourcePlayer)
+			end
+
 			if humanoid.Health - damage <= 0 then
 				targetPlayer:SetAttribute("IsPlaying", false)
 				humanoid.Health = humanoid.MaxHealth

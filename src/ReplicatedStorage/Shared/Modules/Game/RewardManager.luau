@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 
 local CurrencyServer = require(ServerScriptService.Server.Services.CurrencyService.CurrencyServer)
+local QuestServer = require(ServerScriptService.Server.Services.QuestService.QuestServer)
 local SpectateMechanic = require(ServerScriptService.Server.Classes.SpectateMechanic)
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
 local RewardConfig = require(Shared.Modules.Core.RewardConfig)
@@ -30,6 +31,8 @@ function RewardManager.ProcessDeath(victim, killerName, weaponName, victimsCount
 	local totalReward = placementReward + roundCash
 	
 	CurrencyServer.AddCash(victim, placementReward)
+	QuestServer.UpdateEliminations(victim)
+	if placement == 2 then QuestServer.UpdateSecondPlace(victim) end
 	RoundRemotes.GetDeathScreenEvent():FireClient(victim, killerName, weaponName, victimsCount, placement, totalReward, roundKills)
 
 	SpectateMechanic.Refresh()
@@ -44,6 +47,7 @@ function RewardManager.ProcessWin(player)
 	
 	CurrencyServer.AddCash(player, placementReward)
 	CurrencyServer.AddWins(player, 1)
+	QuestServer.UpdateRoundWins(player)
 	RoundRemotes.GetDeathScreenEvent():FireClient(player, "You Survived", "Won The Round", -2, 1, totalReward, roundKills)
 end
 

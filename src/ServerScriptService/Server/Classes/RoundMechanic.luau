@@ -37,6 +37,17 @@ function RoundMechanic:Start()
 			return self.roundServer.CurrentState == RoundConfig.States.InGame
 		end
 
+		-- Pace ramp: each completed colour cycle shrinks the timers toward their floors,
+		-- so reaction windows tighten the longer the round runs. cycle is local to this
+		-- thread, so every round starts back at full durations.
+		local cycle = 0
+		local ramp = phases.Ramp or {}
+		local function scaled(base, phaseKey)
+			if not ramp.Enabled then return base end
+			local floor = (ramp.Min and ramp.Min[phaseKey]) or base
+			return math.max(floor, math.floor(base * (ramp.Factor or 1) ^ cycle + 0.5))
+		end
+
 		-- Counts down a phase a second at a time, bailing early if the round ends.
 		local function hold(seconds)
 			while seconds > 0 and inGame() do
@@ -72,10 +83,16 @@ function RoundMechanic:Start()
 		hold(phases.PushDuration)
 
 		while inGame() do
-			-- Colour is called while the platforms are still up: time to run for it.
+			-- Colour is called while the platforms are still up: time to run for it. The
+			-- ramped duration rides the existing remote, so the HUD countdown just shows it.
+			local announceTime = scaled(phases.AnnounceDuration, "Announce")
 			self.roundServer.CurrentColor = colors[rng:NextInteger(1, #colors)]
-			RoundRemotes.GetColorEvent():FireAllClients(self.roundServer.CurrentColor, phases.AnnounceDuration)
-			hold(phases.AnnounceDuration)
+			RoundRemotes.GetColorEvent():FireAllClients(self.roundServer.CurrentColor, announceTime)
+
+			-- The last second of the announce window is spent flickering the doomed
+			-- platforms instead of waiting, so the vanish is telegraphed in-world and not
+			-- only by the HUD text. Total time still adds up to announceTime.
+			hold(math.max(announceTime - 1, 0))
 			if not inGame() then break end
 
 			local hiddenParts = {}
@@ -85,14 +102,31 @@ function RoundMechanic:Start()
 						for _, part in folder:GetDescendants() do
 							if part:IsA("BasePart") then
 								table.insert(hiddenParts, {obj = part, isPart = true, transparency = part.Transparency, canCollide = part.CanCollide})
-								part.Transparency = 1
-								part.CanCollide = false
 							elseif part:IsA("Texture") or part:IsA("Decal") then
 								table.insert(hiddenParts, {obj = part, isPart = false, transparency = part.Transparency})
-								part.Transparency = 1
 							end
 						end
 					end
+				end
+			end
+
+			for _ = 1, 3 do
+				if not inGame() then break end
+				for _, data in ipairs(hiddenParts) do
+					if data.isPart and data.obj.Parent then data.obj.Transparency = 0.6 end
+				end
+				task.wait(0.15)
+				for _, data in ipairs(hiddenParts) do
+					if data.isPart and data.obj.Parent then data.obj.Transparency = data.transparency end
+				end
+				task.wait(0.18)
+			end
+			if not inGame() then break end
+
+			for _, data in ipairs(hiddenParts) do
+				if data.obj.Parent then
+					data.obj.Transparency = 1
+					if data.isPart then data.obj.CanCollide = false end
 				end
 			end
 
@@ -102,7 +136,7 @@ function RoundMechanic:Start()
 
 			-- Platforms are gone, so this is the only window where weapons exist.
 			setPhase(PHASE_SHOOT)
-			hold(phases.HiddenDuration)
+			hold(scaled(phases.HiddenDuration, "Hidden"))
 
 			-- Weapons go away before the platforms come back, so there is no interleaving
 			-- where a player is holding a gun with every platform up.
@@ -119,8 +153,12 @@ function RoundMechanic:Start()
 
 			if not inGame() then break end
 
-			RoundRemotes.GetColorEvent():FireAllClients("Next", phases.PushDuration)
-			hold(phases.PushDuration)
+			-- One full cycle done: everything after this point runs a little faster.
+			cycle += 1
+
+			local pushTime = scaled(phases.PushDuration, "Push")
+			RoundRemotes.GetColorEvent():FireAllClients("Next", pushTime)
+			hold(pushTime)
 		end
 	end)
 

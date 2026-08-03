@@ -1,9 +1,46 @@
 local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
+local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SettingsController = require(ReplicatedStorage.Shared.UIControllers.SettingsController)
+local FXConfig = require(ReplicatedStorage.Shared.Modules.Core.FXConfig)
 
 local UIAnimations = {}
 local originalPositions: {[GuiObject]: UDim2} = {}
+
+-- UI audio goes through here so every bound button sounds the same, and so the Master
+-- and UI volume sliders in Settings actually govern it.
+local function uiVolumeScale()
+	local master = SettingsController.GetValue("Master Volume")
+	local ui = SettingsController.GetValue("UI Volume")
+	master = (type(master) == "number" and master or 100) / 100
+	ui = (type(ui) == "number" and ui or 80) / 100
+	return master * ui
+end
+
+function UIAnimations.PlayUISound(name: string?, volumeScale: number?)
+	local config = FXConfig.UI
+	if not config or config.Enabled == false then return end
+
+	local folder = SoundService:FindFirstChild(FXConfig.SoundFolder or "GameSounds")
+	local template = folder and name and folder:FindFirstChild(name)
+	if not template or not template:IsA("Sound") then return end
+
+	-- Clone per play so rapid clicks overlap instead of restarting each other.
+	local sound = template:Clone()
+	sound.Volume = template.Volume * uiVolumeScale() * (volumeScale or 1)
+	sound.Parent = SoundService
+	sound:Play()
+	Debris:AddItem(sound, 3)
+end
+
+function UIAnimations.PlayClick()
+	UIAnimations.PlayUISound(FXConfig.UI.Click)
+end
+
+function UIAnimations.PlayHover()
+	UIAnimations.PlayUISound(FXConfig.UI.Hover, FXConfig.UI.HoverScale)
+end
 
 local function getTweenInfo(duration, style, direction)
 	if SettingsController.GetValue("Reduce Motion") then
@@ -22,6 +59,7 @@ function UIAnimations.BindButtonAnimations(button: Instance)
 	end
 
 	button.MouseEnter:Connect(function()
+		UIAnimations.PlayHover()
 		if uiScale then
 			TweenService:Create(uiScale, getTweenInfo(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale = 1.05}):Play()
 		end
@@ -32,6 +70,8 @@ function UIAnimations.BindButtonAnimations(button: Instance)
 			TweenService:Create(uiScale, getTweenInfo(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale = 1}):Play()
 		end
 	end)
+
+	button.MouseButton1Click:Connect(UIAnimations.PlayClick)
 end
 
 function UIAnimations.InitializePopObject(guiObject: GuiObject)

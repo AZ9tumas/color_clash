@@ -14,7 +14,11 @@ local DataTemplate = {
 		Main = "Pistol",
 		Melee = "Wooden Knife"
 	},
-	Settings = {}
+	Settings = {},
+	Quests = {
+		Stats = {},
+		Completed = {}
+	}
 }
 
 return DataTemplate

@@ -1,4 +1,6 @@
 local rs = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local MovementConfig = require(ReplicatedStorage.Shared.Modules.Core.MovementConfig)
 
 local rh = {}
 
@@ -23,6 +25,11 @@ local function createCollider(part)
 end
 
 function rh.apply(char, duration, kbVelocity)
+	-- Re-entrancy guard. A second apply while already ragdolled captured WalkSpeed 0 into
+	-- OldWalkSpeed, so remove() restored 0 and the player stood up permanently unable to
+	-- move. Both the reset button and void-falls during knockback could trigger it.
+	if char:GetAttribute("Ragdolled") then return end
+
 	char:SetAttribute("Ragdolled", true)
 	
 	local hum = char:FindFirstChildOfClass("Humanoid")
@@ -108,7 +115,10 @@ function rh.remove(char)
 	
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if hum and hum.Health > 0 then
-		hum.WalkSpeed = char:GetAttribute("OldWalkSpeed") or 22
+		-- Floored at walking speed as a belt-and-braces backstop: even if a corrupt
+		-- OldWalkSpeed ever gets captured again, nobody stands up frozen.
+		local baseWalk = MovementConfig.Speeds.Walk
+		hum.WalkSpeed = math.max(char:GetAttribute("OldWalkSpeed") or baseWalk, baseWalk)
 		hum.JumpPower = char:GetAttribute("OldJumpPower") or 50
 		hum.AutoRotate = true
 		hum.PlatformStand = false

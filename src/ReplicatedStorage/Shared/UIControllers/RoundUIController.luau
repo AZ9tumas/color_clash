@@ -9,6 +9,14 @@ local Shared = ReplicatedStorage.Shared
 local RoundConfig = require(Shared.Modules.Core.RoundConfig)
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
 local UIAnimations = require(Shared.Modules.Utils.UIAnimations)
+local FXUtil = require(Shared.Modules.Utils.FXUtil)
+
+local SoundService = game:GetService("SoundService")
+
+-- Announcer layer: every HUD message transition gets a cue, played globally.
+local function announce(soundName)
+	FXUtil.PlaySoundAt(soundName, SoundService)
+end
 
 local RoundUIController = {}
 
@@ -192,7 +200,7 @@ local function syncUIVisibility()
 	else
 		if currentState == RoundConfig.States.Voting then
 			playVotingAnimation()
-		elseif currentState == RoundConfig.States.Intermission or currentState == RoundConfig.States.PostRound then
+		elseif currentState == RoundConfig.States.PostRound then
 			UIAnimations.PopInFromTop(Message)
 		end
 		
@@ -278,15 +286,16 @@ function RoundUIController.Init()
 		if newState == RoundConfig.States.Voting then
 			if not inMenu then
 				playVotingAnimation()
+				if oldState ~= RoundConfig.States.Voting then announce("VoteOpen") end
 				Message.Text = "Vote for next match!(" .. tostring(timeLeft) .. "s)"
 				Message.TextColor3 = Color3.new(1, 1, 1)
 			end
-			
+
 		elseif newState == RoundConfig.States.PostRound then
 			if not inMenu then
 				if oldState == RoundConfig.States.Voting then UIAnimations.PopOut(ButtonsHolder)
 				elseif oldState ~= RoundConfig.States.PostRound then UIAnimations.PopInFromTop(Message) end
-				Message.Text = "Intermission: " .. tostring(timeLeft) .. "s"
+				Message.Text = "Next match in: " .. tostring(timeLeft) .. "s"
 				Message.TextColor3 = Color3.new(1, 1, 1)
 			end
 
@@ -294,26 +303,23 @@ function RoundUIController.Init()
 			if not inMenu then
 				if oldState == RoundConfig.States.Voting then UIAnimations.PopOut(ButtonsHolder)
 				elseif oldState ~= RoundConfig.States.TeamSelect then UIAnimations.PopInFromTop(Message) end
+				if oldState ~= RoundConfig.States.TeamSelect then announce("VoteOpen") end
 				Message.Text = "Pick a team to play: " .. tostring(timeLeft) .. "s"
 				Message.TextColor3 = Color3.new(1, 1, 1)
 			end
 
-		elseif newState == RoundConfig.States.Intermission then
-			if not inMenu then
-				if oldState == RoundConfig.States.Voting then UIAnimations.PopOut(ButtonsHolder)
-				elseif oldState ~= RoundConfig.States.Intermission then UIAnimations.PopInFromTop(Message) end
-				Message.Text = "Starting in: " .. tostring(timeLeft) .. "s"
-				Message.TextColor3 = Color3.new(1, 1, 1)
-			end
-
 		elseif newState == RoundConfig.States.InGame then
-			if oldState == RoundConfig.States.Intermission or oldState == RoundConfig.States.Voting or oldState == RoundConfig.States.PostRound then 
-				UIAnimations.PopOutToTop(Message) 
+			-- Voting or team select can now roll straight into the round, so both must
+			-- clear their UI here; there is no intermission in between anymore.
+			if oldState == RoundConfig.States.Voting or oldState == RoundConfig.States.TeamSelect or oldState == RoundConfig.States.PostRound then
+				UIAnimations.PopOutToTop(Message)
+				if oldState == RoundConfig.States.Voting then UIAnimations.PopOut(ButtonsHolder) end
+				announce("RoundStart")
 			end
 			TimerTitle.Text = string.format("%d:%02d", math.floor(timeLeft / 60), timeLeft % 60)
 
 		else
-			if oldState == RoundConfig.States.Voting or oldState == RoundConfig.States.Intermission or oldState == RoundConfig.States.PostRound then
+			if oldState == RoundConfig.States.Voting or oldState == RoundConfig.States.TeamSelect or oldState == RoundConfig.States.PostRound then
 				UIAnimations.PopOutToTop(Message)
 				if oldState == RoundConfig.States.Voting then UIAnimations.PopOut(ButtonsHolder) end
 			end
@@ -373,14 +379,17 @@ function RoundUIController.Init()
 			Message.TextColor3 = Color3.new(1, 1, 1)
 			UIAnimations.PopInFromTop(Message)
 			UIAnimations.PopText(Message)
-			
+
 			currentColorThread = task.spawn(function()
 				for i = duration, 1, -1 do
 					Message.Text = "Next color in: " .. i .. "s"
+					-- Only the last three seconds tick, so the cue means "get ready"
+					-- rather than becoming a metronome for the whole window.
+					if i <= 3 then announce("CountTick") end
 					task.wait(1)
 				end
 				Message.Text = "Next color in: 0s"
-				task.wait(0.5) 
+				task.wait(0.5)
 				if string.match(Message.Text, "Next color in") then
 					UIAnimations.PopOutToTop(Message)
 				end
@@ -397,14 +406,19 @@ function RoundUIController.Init()
 		Message.TextColor3 = colorCode
 		UIAnimations.PopInFromTop(Message)
 		UIAnimations.PopText(Message)
-		
+		announce("ColorAlert")
+
 		currentColorThread = task.spawn(function()
 			for i = duration, 1, -1 do
 				Message.Text = "STAND ON " .. string.upper(color) .. "! (" .. i .. "s)"
+				announce("CountTick")
 				task.wait(1)
 			end
 			Message.Text = "STAND ON " .. string.upper(color) .. "! (0s)"
-			task.wait(2.2) 
+			-- The server hides the wrong platforms right as this countdown expires, so
+			-- the vanish sweep is timed here rather than needing its own remote.
+			announce("Vanish")
+			task.wait(2.2)
 			if string.match(Message.Text, "STAND ON") then
 				UIAnimations.PopOutToTop(Message)
 			end

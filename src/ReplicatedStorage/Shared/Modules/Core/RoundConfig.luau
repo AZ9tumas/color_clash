@@ -5,7 +5,6 @@ RoundConfig.States = {
     PostRound = "PostRound",
     Voting = "Voting",
     TeamSelect = "TeamSelect",
-    Intermission = "Intermission",
     InGame = "InGame"
 }
 
@@ -13,13 +12,11 @@ RoundConfig.Modes = {
     FFA = {
         Name = "FFA",
         MinimumPlayers = 1,
-        IntermissionDuration = 3,
         GameDuration = 120
     },
     Teams = {
         Name = "Teams",
         MinimumPlayers = 2,
-        IntermissionDuration = 3,
         GameDuration = 120,
         TeamBased = true,
         FriendlyFire = false
@@ -50,6 +47,20 @@ RoundConfig.Phases = {
 	PushDuration = 10, -- all platforms up, no colour called yet
 	AnnounceDuration = 5, -- all platforms up, colour called, run for it
 	HiddenDuration = 15, -- wrong platforms gone, weapons live
+
+	-- Pace ramp: every completed colour cycle multiplies the timers by Factor, clamped to
+	-- the per-phase Min, and resets at the start of each round. Reaction windows tighten
+	-- the longer the round runs. Set a phase's Min equal to its base duration to exempt
+	-- that phase from the ramp entirely.
+	Ramp = {
+		Enabled = true,
+		Factor = 0.85,
+		Min = {
+			Push = 4,
+			Announce = 2,
+			Hidden = 10,
+		},
+	},
 }
 
 RoundConfig.Push = {
