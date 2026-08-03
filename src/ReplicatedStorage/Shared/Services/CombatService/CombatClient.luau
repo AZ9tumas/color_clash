@@ -12,6 +12,7 @@ local RoundRemotes = require(Shared.Remotes.RoundRemotes)
 local WeaponClient = require(Shared.Classes.WeaponClient)
 local CrosshairController = require(Shared.UIControllers.CrosshairController)
 local SettingsController = require(Shared.UIControllers.SettingsController)
+local FXUtil = require(Shared.Modules.Utils.FXUtil)
 
 local CombatClient = {}
 
@@ -270,7 +271,9 @@ function CombatClient.Init()
 	CombatRemotes.GetBulletTracer().OnClientEvent:Connect(function(origin, targetPos)
 		local distance = (targetPos - origin).Magnitude
 		if distance < 0.1 then return end
-		
+
+		FXUtil.MuzzleFlash(origin)
+
 		local tracer = Instance.new("Part")
 		tracer.Name = "Tracer"
 		tracer.Anchored = true

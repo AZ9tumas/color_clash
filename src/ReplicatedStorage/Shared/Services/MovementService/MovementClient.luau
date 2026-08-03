@@ -8,6 +8,8 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage.Shared
 local MovementConfig = require(Shared.Modules.Core.MovementConfig)
 local MovementRemotes = require(Shared.Remotes.MovementRemotes)
+local FXConfig = require(Shared.Modules.Core.FXConfig)
+local FXUtil = require(Shared.Modules.Utils.FXUtil)
 
 local MovementClient = {}
 
@@ -33,6 +35,7 @@ local isVaulting = false
 
 local airSpeed = nil
 local wasGrounded = true
+local fallSpeed = 0
 
 local lastGroundJumpTime = 0
 local lastWallJumpTime = 0
@@ -306,6 +309,7 @@ performSlide = function()
 	lastSlideTime = tick()
 
 	setState("Slide")
+	FXUtil.SlideStart(root)
 
 	local pBase = configVal("Slide", "BasePower", 80)
 	local pSprint = configVal("Slide", "SprintPower", 110)
@@ -595,6 +599,9 @@ function MovementClient.Init()
 					
 					root.AssemblyLinearVelocity = Vector3.new(currentVel.X, djPwr, currentVel.Z)
 					hum:ChangeState(Enum.HumanoidStateType.Jumping)
+
+					-- Ring bursts from under the feet, not the torso.
+					FXUtil.DoubleJumpBurst(root.Position - Vector3.new(0, getDistToFloor(), 0))
 				end
 			end
 		end
@@ -631,10 +638,20 @@ function MovementClient.Init()
 		-- Capture speed the frame we leave the ground, release it the frame we land.
 		-- Wall states drive their own speed, so they opt out.
 		local grounded = hum.FloorMaterial ~= Enum.Material.Air
+		if not grounded then
+			-- Track the fastest descent of this fall so the landing sound can be gated on
+			-- it, otherwise every kerb and slope thuds.
+			fallSpeed = math.min(fallSpeed, root.AssemblyLinearVelocity.Y)
+		end
+
 		if grounded ~= wasGrounded then
 			wasGrounded = grounded
 			if grounded then
 				endAirMomentum()
+				if fallSpeed <= -FXConfig.Land.MinFallSpeed then
+					FXUtil.LandImpact(root.Position - Vector3.new(0, getDistToFloor(), 0))
+				end
+				fallSpeed = 0
 			elseif airSpeed == nil and not isWallRunning and not isWallClimbing and not isVaulting then
 				beginAirMomentum()
 			end

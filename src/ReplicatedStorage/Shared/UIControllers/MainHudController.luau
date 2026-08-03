@@ -32,6 +32,120 @@ function MainHudController.SetWeaponInfo(weaponName, ammoStr)
 	AmmoText.Text = ammoStr or "N/A"
 end
 
+-- Every slot button ships with the same pistol image. Rather than sourcing an icon per
+-- weapon, render the real Tool model in a ViewportFrame: always matches the weapon, and
+-- any weapon added to Shared.Assets.Weapons later is covered with no extra work.
+local weaponsFolder = nil
+
+local function weaponTemplate(name)
+	if not weaponsFolder then
+		local assets = Shared:FindFirstChild("Assets")
+		weaponsFolder = assets and assets:FindFirstChild("Weapons")
+	end
+	if not weaponsFolder or not name then return nil end
+	return weaponsFolder:FindFirstChild(name)
+end
+
+local function boundsOf(instance)
+	local min, max
+	for _, d in instance:GetDescendants() do
+		if d:IsA("BasePart") then
+			local lo, hi = d.Position - d.Size / 2, d.Position + d.Size / 2
+			min = min and Vector3.new(math.min(min.X, lo.X), math.min(min.Y, lo.Y), math.min(min.Z, lo.Z)) or lo
+			max = max and Vector3.new(math.max(max.X, hi.X), math.max(max.Y, hi.Y), math.max(max.Z, hi.Z)) or hi
+		end
+	end
+	return min, max
+end
+
+local function renderWeaponIcon(btn, weaponName)
+	local viewport = btn:FindFirstChild("WeaponIcon")
+	local template = weaponTemplate(weaponName)
+
+	if not template then
+		if viewport then viewport.Visible = false end
+		return
+	end
+
+	-- Rebuilding the model every refresh would be wasteful; this runs on every tool change.
+	if viewport and viewport:GetAttribute("Weapon") == weaponName then
+		viewport.Visible = true
+		return
+	end
+
+	if not viewport then
+		viewport = Instance.new("ViewportFrame")
+		viewport.Name = "WeaponIcon"
+		viewport.Size = UDim2.fromScale(1, 1)
+		viewport.BackgroundTransparency = 1
+		viewport.ZIndex = btn.ZIndex + 1
+		viewport.Parent = btn
+	end
+
+	for _, child in viewport:GetChildren() do child:Destroy() end
+
+	local model = template:Clone()
+	-- Strip anything that could fire inside the viewport.
+	for _, d in model:GetDescendants() do
+		if d:IsA("Sound") or d:IsA("RemoteEvent") or d:IsA("BaseScript") or d:IsA("Animation") then
+			d:Destroy()
+		end
+	end
+	model.Parent = viewport
+
+	local min, max = boundsOf(model)
+	if not min then
+		viewport.Visible = false
+		return
+	end
+
+	local center = (min + max) / 2
+	local radius = math.max((max - min).Magnitude / 2, 0.1)
+
+	local cam = Instance.new("Camera")
+	cam.Parent = viewport
+	viewport.CurrentCamera = cam
+	-- Three-quarter view, pulled back far enough to frame the whole weapon.
+	cam.CFrame = CFrame.lookAt(center + Vector3.new(1, 0.45, 1).Unit * (radius * 2.6), center)
+
+	viewport:SetAttribute("Weapon", weaponName)
+	viewport.Visible = true
+
+	-- Hide the stock pistol image now that something better is drawn on top of it.
+	btn.Image = ""
+end
+
+local function refreshWeaponIcons()
+	local mainName, meleeName
+
+	-- Built conditionally rather than as a literal: during a respawn Character is nil, and
+	-- generalized iteration over {nil, backpack} stops at the first nil, which would skip
+	-- the Backpack entirely and blank both icons.
+	local containers = {}
+	if player.Character then table.insert(containers, player.Character) end
+	local backpack = player:FindFirstChild("Backpack")
+	if backpack then table.insert(containers, backpack) end
+
+	for _, container in containers do
+		if container then
+			for _, tool in container:GetChildren() do
+				if tool:IsA("Tool") then
+					local data = Items[tool.Name]
+					local isMain = data and data.MaxAmmo ~= nil
+					if isMain and not mainName then
+						mainName = tool.Name
+					elseif not isMain and not meleeName then
+						meleeName = tool.Name
+					end
+				end
+			end
+		end
+	end
+
+	renderWeaponIcon(MainSlotBtn, mainName)
+	renderWeaponIcon(MeleeSlotBtn, meleeName)
+end
+
 local function updateVisibility()
 	local hasTools = false
 	if player.Character then
@@ -61,6 +175,7 @@ local function updateVisibility()
 	end
 	
 	HealthBarFrame.Visible = isPlaying
+	refreshWeaponIcons()
 end
 
 local function updateHealth(health, maxHealth)
