@@ -31,20 +31,20 @@ function PlayerUtil.GiveWeapons(player)
 	if RunService:IsServer() then
 		local DataServer = require(game:GetService("ServerScriptService").Server.Services.DataService.DataServer)
 		local profile = DataServer.GetProfile(player)
-		
+
 		if profile and profile.Data.Equipped then
 			local mainWep = profile.Data.Equipped.Main
 			local meleeWep = profile.Data.Equipped.Melee
-			
+
 			local function giveTool(name)
 				if name then
 					local tool = weaponsFolder:FindFirstChild(name)
-					if tool and not player.Backpack:FindFirstChild(name) and (not player.Character or not player.Character:FindFirstChild(name)) then 
-						tool:Clone().Parent = player.Backpack 
+					if tool and not player.Backpack:FindFirstChild(name) and (not player.Character or not player.Character:FindFirstChild(name)) then
+						tool:Clone().Parent = player.Backpack
 					end
 				end
 			end
-			
+
 			giveTool(mainWep)
 			giveTool(meleeWep)
 		end

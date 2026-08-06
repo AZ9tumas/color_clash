@@ -71,7 +71,7 @@ RoundConfig.Push = {
 	MinDot = 0.35, -- how far in front a target must be; 1 = dead ahead, 0 = anywhere in a half circle
 	Duration = 0.2, -- how long the LinearVelocity stays attached, making the shove an impulse
 	MaxForce = 100000, -- per-axis force cap on the mover, matching MovementClient's constraints
-	Debug = true, -- prints [Push] lines on both client and server; set false to silence
+	Debug = false, -- prints [Push] lines on both client and server; set false to silence
 }
 
 RoundConfig.VotingDuration = 10
