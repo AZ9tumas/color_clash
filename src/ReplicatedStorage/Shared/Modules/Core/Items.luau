@@ -89,11 +89,13 @@ local Items = {
 			Sprint = 78575890133951 
 		}
 	},
+	-- Stats mirror the reference gunsystem's "Berreta silencer": 35 damage, 15 rounds,
+	-- 2.9s reload, semi-auto, ADS FOV 65.
 	["Pistol"] = {
-		Damage = 35, Cooldown = 0.2, Range = 500, MaxAmmo = 12, ReloadTime = 1.0, Spread = 0,
+		Damage = 35, Cooldown = 0.2, Range = 500, MaxAmmo = 15, ReloadTime = 2.9, Spread = 0,
 		Shake = { Intensity = 1.5, Decay = 18 },
 		Recoil = { Pitch = 2.2, Yaw = 0.6 },
-		Aim = { FOV = 60, SpreadMultiplier = 0.4 },
+		Aim = { FOV = 65, SpreadMultiplier = 0.4 },
 		Animations = { Shoot = 86304083830215, Reload = 84055323674335, Idle = 76788131144151, Walk = 74737589673617, Sprint = 74737589673617 }
 	},
 	["Sniper"] = {

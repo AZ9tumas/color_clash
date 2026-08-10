@@ -21,7 +21,7 @@ local RECOIL_DAMPING = 15
 -- A velocity impulse of X degrees against this spring peaks at roughly 0.037 * X, so
 -- raw config values would be imperceptible. This scales a gun's Recoil.Pitch so the
 -- configured number approximates the visible peak kick in degrees. Feel dial.
-local KICK_MULTIPLIER = 12
+local KICK_MULTIPLIER = 22
 
 local springPosition = Vector3.zero
 local springVelocity = Vector3.zero

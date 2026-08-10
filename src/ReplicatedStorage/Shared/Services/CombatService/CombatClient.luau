@@ -7,6 +7,7 @@ local Workspace = game:GetService("Workspace")
 local HapticService = game:GetService("HapticService")
 
 local Shared = ReplicatedStorage.Shared
+local Items = require(Shared.Modules.Core.Items)
 local CombatRemotes = require(Shared.Remotes.CombatRemotes)
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
 local WeaponClient = require(Shared.Classes.WeaponClient)
@@ -43,6 +44,11 @@ local function setupTool(tool)
 	if not tool:IsA("Tool") then return end
 	if activeWeapons[tool] then return end
 
+	-- Guns are owned by GunService's GunHandler architecture now; WeaponClient only
+	-- handles melee.
+	local data = Items[tool.Name]
+	if data and data.MaxAmmo then return end
+
 	-- Isolated per tool: in the reference gunsystem one bad gun took the whole weapon
 	-- layer down with it. Here it logs, is skipped, and every other gun keeps working.
 	local ok, result = pcall(WeaponClient.new, tool, addRecoil)
@@ -56,39 +62,83 @@ local function setupTool(tool)
 	tool.Unequipped:Connect(function() if equippedWeapon == result then equippedWeapon = nil end end)
 end
 
--- Full-screen red pulse on kill confirmation. Built once, reused; PlayerGui is
--- resolved lazily so a respawn cannot leave this holding a dead ScreenGui.
+-- Kill vignette, Valorant-Reyna style: red gradient edges snap in and drain out slowly,
+-- with a saturation/contrast pulse through a ColorCorrectionEffect so the whole frame
+-- pops for a beat. Procedural - four gradient frames, no image assets to fail.
+local killVignetteFrames = nil
+local killColorCorrection = nil
+
+local function buildKillVignette(playerGui)
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "KillVignette"
+	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 5
+	gui.ResetOnSpawn = false
+	gui.Parent = playerGui
+
+	killVignetteFrames = {}
+
+	-- Edge, thickness fraction, gradient rotation (transparent side faces screen centre)
+	local edges = {
+		{ position = UDim2.fromScale(0, 0), size = UDim2.fromScale(1, 0.22), rotation = 90 },
+		{ position = UDim2.fromScale(0, 0.78), size = UDim2.fromScale(1, 0.22), rotation = -90 },
+		{ position = UDim2.fromScale(0, 0), size = UDim2.fromScale(0.16, 1), rotation = 0 },
+		{ position = UDim2.fromScale(0.84, 0), size = UDim2.fromScale(0.16, 1), rotation = 180 },
+	}
+
+	for _, edge in edges do
+		local frame = Instance.new("Frame")
+		frame.Position = edge.position
+		frame.Size = edge.size
+		frame.BackgroundColor3 = Color3.fromRGB(190, 10, 20)
+		frame.BackgroundTransparency = 1
+		frame.BorderSizePixel = 0
+		frame.Parent = gui
+
+		local gradient = Instance.new("UIGradient")
+		gradient.Rotation = edge.rotation
+		gradient.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		gradient.Parent = frame
+
+		table.insert(killVignetteFrames, frame)
+	end
+end
+
 local function showKillFlash()
 	local playerGui = player:FindFirstChild("PlayerGui")
 	if not playerGui then return end
 
-	local gui = playerGui:FindFirstChild("KillFlash")
-	if not gui then
-		gui = Instance.new("ScreenGui")
-		gui.Name = "KillFlash"
-		gui.IgnoreGuiInset = true
-		gui.DisplayOrder = 5
-		gui.ResetOnSpawn = false
-		gui.Parent = playerGui
-
-		local frame = Instance.new("Frame")
-		frame.Name = "Flash"
-		frame.Size = UDim2.fromScale(1, 1)
-		frame.BackgroundColor3 = Color3.fromRGB(255, 40, 40)
-		frame.BackgroundTransparency = 1
-		frame.BorderSizePixel = 0
-		frame.Parent = gui
+	if not killVignetteFrames or not killVignetteFrames[1] or not killVignetteFrames[1].Parent then
+		buildKillVignette(playerGui)
 	end
 
-	local frame = gui:FindFirstChild("Flash")
-	if not frame then return end
+	if not killColorCorrection or not killColorCorrection.Parent then
+		killColorCorrection = Instance.new("ColorCorrectionEffect")
+		killColorCorrection.Name = "KillPop"
+		killColorCorrection.Parent = game:GetService("Lighting")
+	end
 
-	frame.BackgroundTransparency = 0.82
-	TweenService:Create(frame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		BackgroundTransparency = 1,
+	-- Snap in, drain out.
+	for _, frame in killVignetteFrames do
+		frame.BackgroundTransparency = 0.25
+		TweenService:Create(frame, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundTransparency = 1,
+		}):Play()
+	end
+
+	killColorCorrection.Saturation = 0.25
+	killColorCorrection.Contrast = 0.12
+	killColorCorrection.TintColor = Color3.fromRGB(255, 235, 235)
+	TweenService:Create(killColorCorrection, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Saturation = 0,
+		Contrast = 0,
+		TintColor = Color3.new(1, 1, 1),
 	}):Play()
 
-	CameraFX.Shake(Vector3.new(0.7, 0.7, 0), 0.25, 0.8)
+	CameraFX.Shake(Vector3.new(0.8, 0.8, 0), 0.25, 0.8)
 end
 
 function CombatClient.Init()

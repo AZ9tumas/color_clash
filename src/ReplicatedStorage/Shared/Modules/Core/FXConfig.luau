@@ -8,6 +8,9 @@ FXConfig.SoundFolder = "GameSounds"
 
 -- Global button audio, applied through UIAnimations.BindButtonAnimations and
 -- MenuController.setupMenuButton, so every interactive button gets it for free.
+-- Master switch for [Gun]/[Rig] lifecycle logging in the Output window.
+FXConfig.GunDebug = true
+
 FXConfig.UI = {
 	Enabled = true,
 	Click = "UIClick",

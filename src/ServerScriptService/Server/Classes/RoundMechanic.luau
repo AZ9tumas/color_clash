@@ -174,8 +174,12 @@ function RoundMechanic:Stop()
 
 	Workspace:SetAttribute(PHASE_ATTRIBUTE, nil)
 
+	-- Straggler sweep, restricted to players who were in the game flow. Sweeping
+	-- everyone stripped tools from players sitting in the main menu on every cycle.
 	for _, player in Players:GetPlayers() do
-		PlayerUtil.RemoveWeapons(player)
+		if player:GetAttribute("InMenu") == false then
+			PlayerUtil.RemoveWeapons(player)
+		end
 	end
 
 	local map = Workspace:FindFirstChild("Map")

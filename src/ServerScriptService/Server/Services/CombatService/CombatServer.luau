@@ -31,6 +31,14 @@ function CombatServer.Init()
 			WeaponServer.FireMelee(player, toolName, data)
 		end
 	end)
+
+	-- Aim pitch relay: the client reports where it is looking so other clients can pose
+	-- that character's neck. Clamped and stored as a replicated attribute, so there is
+	-- no rebroadcast loop and late joiners get the current pose for free.
+	CombatRemotes.GetAimPitch().OnServerEvent:Connect(function(player, pitch)
+		if type(pitch) ~= "number" or pitch ~= pitch then return end
+		player:SetAttribute("AimPitch", math.clamp(pitch, -1.4, 1.4))
+	end)
 end
 
 return CombatServer
