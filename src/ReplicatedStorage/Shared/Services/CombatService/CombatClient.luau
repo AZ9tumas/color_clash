@@ -13,6 +13,7 @@ local WeaponClient = require(Shared.Classes.WeaponClient)
 local CrosshairController = require(Shared.UIControllers.CrosshairController)
 local SettingsController = require(Shared.UIControllers.SettingsController)
 local FXUtil = require(Shared.Modules.Utils.FXUtil)
+local CameraFX = require(Shared.Modules.Utils.CameraFX)
 
 local CombatClient = {}
 
@@ -22,13 +23,10 @@ local camera = Workspace.CurrentCamera
 local activeWeapons = setmetatable({}, {__mode = "k"})
 local equippedWeapon = nil
 
-local currentRecoil = 0
-local targetRecoil = 0
 local currentSwayX, currentSwayY = 0, 0
 
+-- Camera recoil moved to CameraFX (spring-based); this callback only drives haptics now.
 local function addRecoil(amount)
-	targetRecoil = targetRecoil + amount
-	
 	if SettingsController.GetValue("Controller Vibration") then
 		pcall(function()
 			if HapticService:IsMotorSupported(Enum.UserInputType.Gamepad1, Enum.VibrationMotor.Small) then
@@ -43,25 +41,80 @@ end
 
 local function setupTool(tool)
 	if not tool:IsA("Tool") then return end
-	if activeWeapons[tool] then return end 
-	
-	local weapon = WeaponClient.new(tool, addRecoil)
-	activeWeapons[tool] = weapon
+	if activeWeapons[tool] then return end
 
-	tool.Equipped:Connect(function() equippedWeapon = weapon end)
-	tool.Unequipped:Connect(function() if equippedWeapon == weapon then equippedWeapon = nil end end)
+	-- Isolated per tool: in the reference gunsystem one bad gun took the whole weapon
+	-- layer down with it. Here it logs, is skipped, and every other gun keeps working.
+	local ok, result = pcall(WeaponClient.new, tool, addRecoil)
+	if not ok then
+		warn(string.format("[Combat] weapon setup failed for %q: %s", tool.Name, tostring(result)))
+		return
+	end
+
+	activeWeapons[tool] = result
+	tool.Equipped:Connect(function() equippedWeapon = result end)
+	tool.Unequipped:Connect(function() if equippedWeapon == result then equippedWeapon = nil end end)
+end
+
+-- Full-screen red pulse on kill confirmation. Built once, reused; PlayerGui is
+-- resolved lazily so a respawn cannot leave this holding a dead ScreenGui.
+local function showKillFlash()
+	local playerGui = player:FindFirstChild("PlayerGui")
+	if not playerGui then return end
+
+	local gui = playerGui:FindFirstChild("KillFlash")
+	if not gui then
+		gui = Instance.new("ScreenGui")
+		gui.Name = "KillFlash"
+		gui.IgnoreGuiInset = true
+		gui.DisplayOrder = 5
+		gui.ResetOnSpawn = false
+		gui.Parent = playerGui
+
+		local frame = Instance.new("Frame")
+		frame.Name = "Flash"
+		frame.Size = UDim2.fromScale(1, 1)
+		frame.BackgroundColor3 = Color3.fromRGB(255, 40, 40)
+		frame.BackgroundTransparency = 1
+		frame.BorderSizePixel = 0
+		frame.Parent = gui
+	end
+
+	local frame = gui:FindFirstChild("Flash")
+	if not frame then return end
+
+	frame.BackgroundTransparency = 0.82
+	TweenService:Create(frame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 1,
+	}):Play()
+
+	CameraFX.Shake(Vector3.new(0.7, 0.7, 0), 0.25, 0.8)
 end
 
 function CombatClient.Init()
 	CrosshairController.SetCrosshairVisible(false)
 
-	CombatRemotes.GetDamageVFX().OnClientEvent:Connect(function(position, damage, hitPart, hitNormal)
+	CombatRemotes.GetDamageVFX().OnClientEvent:Connect(function(position, damage, hitPart, hitNormal, killed)
 		local isHeadshot = hitPart and string.find(string.lower(hitPart.Name), "head") ~= nil
-		
+
 		if hitPart then
 			CrosshairController.ShowHitMarker(isHeadshot and 2 or 1)
+
+			if SettingsController.GetValue("Hit Marker Sound") then
+				FXUtil.PlaySoundAt(isHeadshot and "Headshot" or "Land", game:GetService("SoundService"), isHeadshot and 1 or 0.4)
+			end
+
+			local hitCharacter = hitPart:FindFirstAncestorWhichIsA("Model")
+			if hitCharacter and hitCharacter:FindFirstChildOfClass("Humanoid")
+				and SettingsController.GetValue("Blood Effects") then
+				FXUtil.BodyHit(position, isHeadshot)
+			end
 		end
-		
+
+		if killed then
+			showKillFlash()
+		end
+
 		local debrisFolder = Workspace:FindFirstChild("WallDebrisFolder") or Instance.new("Folder", Workspace)
 		debrisFolder.Name = "WallDebrisFolder"
 		
@@ -314,20 +367,6 @@ function CombatClient.Init()
 			end
 		end
 
-		if SettingsController.GetValue("Camera Shake") then
-			local prev = currentRecoil
-			currentRecoil = currentRecoil + (targetRecoil - currentRecoil) * math.min(1, dt * 18)
-			targetRecoil = targetRecoil * (1 - dt * 9)
-
-			local delta = currentRecoil - prev
-			if math.abs(delta) > 0.00005 then
-				camera.CFrame = camera.CFrame * CFrame.Angles(-delta, 0, 0)
-			end
-		else
-			targetRecoil = 0
-			currentRecoil = 0
-		end
-		
 		if isFirstPerson and isAlive then
 			local targetSwayX = 0
 			local targetSwayY = 0

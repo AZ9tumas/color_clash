@@ -7,6 +7,7 @@ local Shared = ReplicatedStorage.Shared
 local RoundConfig = require(Shared.Modules.Core.RoundConfig)
 local PlayerUtil = require(Shared.Modules.Utils.PlayerUtil)
 local RaycastUtil = require(Shared.Modules.Utils.RaycastUtil)
+local FXUtil = require(Shared.Modules.Utils.FXUtil)
 local QuestServer = require(ServerScriptService.Server.Services.QuestService.QuestServer)
 local RewardManager = require(Shared.Modules.Game.RewardManager)
 local CombatRemotes = require(Shared.Remotes.CombatRemotes)
@@ -22,14 +23,14 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
 	local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
 	
-	if not humanoid or humanoid.Health <= 0 then return end
+	if not humanoid or humanoid.Health <= 0 then return false end
 
 	-- Friendly fire. ProcessDamage is the single funnel for melee and hitscan alike, so
 	-- this one gate covers every weapon. Gated on the mode so FFA is unaffected.
 	local mode = RoundConfig.CurrentMode
 	if mode.TeamBased and not mode.FriendlyFire and sourcePlayer and targetPlayer then
 		local sourceTeam = sourcePlayer:GetAttribute("Team")
-		if sourceTeam and sourceTeam == targetPlayer:GetAttribute("Team") then return end
+		if sourceTeam and sourceTeam == targetPlayer:GetAttribute("Team") then return false end
 	end
 
 	if targetPlayer then
@@ -69,6 +70,7 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 				
 				RewardManager.ProcessDeath(targetPlayer, sourceName, toolName or "Unknown Weapon", currentKills)
 				KillFeedEvent:FireAllClients(sourceName, targetPlayer.Name)
+				return true
 			else
 				humanoid:TakeDamage(damage)
 			end
@@ -80,10 +82,13 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 				RewardManager.ProcessKill(sourcePlayer)
 				KillFeedEvent:FireAllClients(sourceName, targetCharacter.Name)
 			end
+			return true
 		else
 			humanoid:TakeDamage(damage)
 		end
 	end
+
+	return false
 end
 
 function WeaponServer.FireMelee(player, toolName, data)
@@ -120,18 +125,19 @@ function WeaponServer.FireMelee(player, toolName, data)
 		local targetChar = hitPart:FindFirstAncestorWhichIsA("Model")
 		if targetChar and targetChar:FindFirstChildOfClass("Humanoid") and not hitTargets[targetChar] then
 			hitTargets[targetChar] = true
-			WeaponServer.ProcessDamage(targetChar, data.Damage, player.Name, player, toolName)
-			
+			local killed = WeaponServer.ProcessDamage(targetChar, data.Damage, player.Name, player, toolName)
+
 			local diff = handle.Position - hitPart.Position
 			local fakeNormal = diff.Magnitude > 0.001 and diff.Unit or Vector3.new(0, 1, 0)
-			DamageVFX:FireClient(player, hitPart.Position, tostring(data.Damage), hitPart, fakeNormal)
+			DamageVFX:FireClient(player, hitPart.Position, tostring(data.Damage), hitPart, fakeNormal, killed == true)
 		end
 	end
 end
 
-function WeaponServer.FireHitscan(player, toolName, data, mousePos)
+function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming)
 	local character = player.Character
 	if not character or not mousePos then return end
+	if typeof(mousePos) ~= "Vector3" then return end
 	local tool = character:FindFirstChild(toolName)
 	if not tool then return end
 	local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)
@@ -146,14 +152,28 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos)
 	end
 	if handle:FindFirstChild("FireSFX") then handle.FireSFX:Play() end
 
-	local origin = handle.Position
+	-- Tracers and flashes start at the actual muzzle when one can be found; the handle
+	-- is only the fallback. The multiplier comes from the server's own config, so a
+	-- client saying "I'm aiming" can only ever get the reduction this gun defines.
+	local origin = FXUtil.GetMuzzlePosition(tool) or handle.Position
+
+	local spread = data.Spread or 0
+	if isAiming and spread > 0 then
+		local aimMultiplier = (data.Aim and data.Aim.SpreadMultiplier) or 0.5
+		spread = spread * math.clamp(aimMultiplier, 0, 1)
+	end
 
 	for i = 1, data.Pellets or 1 do
 		local direction = (mousePos - origin).Unit
 		local range = data.Range or 1000
 
-		if data.Spread and data.Spread > 0 then
-			direction = (direction + Vector3.new(math.random(-data.Spread, data.Spread)/1000, math.random(-data.Spread, data.Spread)/1000, math.random(-data.Spread, data.Spread)/1000)).Unit
+		if spread > 0 then
+			-- Float form: aim-reduced spread is fractional, and integer math.random(a, b)
+			-- errors on non-integer bounds.
+			local function jitter()
+				return (math.random() * 2 - 1) * spread / 1000
+			end
+			direction = (direction + Vector3.new(jitter(), jitter(), jitter())).Unit
 		end
 
 		local currentIgnore = {character}
@@ -169,9 +189,10 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos)
 			visualTarget = result.Position
 			local targetChar = result.Instance:FindFirstAncestorWhichIsA("Model")
 			if targetChar and targetChar:FindFirstChildOfClass("Humanoid") then
-				local damage = (result.Instance.Name == "Head") and data.Damage * 2 or data.Damage
-				WeaponServer.ProcessDamage(targetChar, damage, player.Name, player, toolName)
-				DamageVFX:FireClient(player, visualTarget, tostring(damage), result.Instance, result.Normal)
+				local isHeadshot = result.Instance.Name == "Head"
+				local damage = isHeadshot and data.Damage * 2 or data.Damage
+				local killed = WeaponServer.ProcessDamage(targetChar, damage, player.Name, player, toolName)
+				DamageVFX:FireClient(player, visualTarget, tostring(damage), result.Instance, result.Normal, killed == true)
 			end
 		end
 		ShowBulletTracer:FireAllClients(origin, visualTarget)

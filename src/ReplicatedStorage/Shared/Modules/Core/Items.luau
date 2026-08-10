@@ -92,31 +92,43 @@ local Items = {
 	["Pistol"] = {
 		Damage = 35, Cooldown = 0.2, Range = 500, MaxAmmo = 12, ReloadTime = 1.0, Spread = 0,
 		Shake = { Intensity = 1.5, Decay = 18 },
+		Recoil = { Pitch = 2.2, Yaw = 0.6 },
+		Aim = { FOV = 60, SpreadMultiplier = 0.4 },
 		Animations = { Shoot = 86304083830215, Reload = 84055323674335, Idle = 76788131144151, Walk = 74737589673617, Sprint = 74737589673617 }
 	},
 	["Sniper"] = {
 		Damage = 250, Cooldown = 1.0, Range = 1000, MaxAmmo = 5, ReloadTime = 2.0, Spread = 0,
 		Shake = { Intensity = 4.0, Decay = 7 },
+		Recoil = { Pitch = 6.0, Yaw = 1.0 },
+		Aim = { FOV = 30, SpreadMultiplier = 0.1 },
 		Animations = { Shoot = 101828241949203, Reload = 93766855465736, Idle = 98715180840350, Walk = 133471749603993, Sprint = 133471749603993 }
 	},
 	["AR"] = {
 		Damage = 35, Cooldown = 0.08, Range = 600, MaxAmmo = 30, ReloadTime = 1.5, Spread = 8, AutoFire = true,
 		Shake = { Intensity = 0.8, Decay = 12 },
+		Recoil = { Pitch = 1.4, Yaw = 0.45 },
+		Aim = { FOV = 55, SpreadMultiplier = 0.45 },
 		Animations = { Shoot = 98842943786422, Reload = 70986236399168, Idle = 127694603378551, Walk = 116073209021469, Sprint = 116073209021469 }
 	},
 	["SMG"] = {
 		Damage = 20, Cooldown = 0.06, Range = 400, MaxAmmo = 40, ReloadTime = 1.2, Spread = 15, AutoFire = true,
 		Shake = { Intensity = 0.5, Decay = 16 },
+		Recoil = { Pitch = 1.0, Yaw = 0.4 },
+		Aim = { FOV = 58, SpreadMultiplier = 0.5 },
 		Animations = { Shoot = 93777660426232, Reload = 116733200772749, Idle = 124267210387896, Walk = 128330126585616, Sprint = 128330126585616 }
 	},
 	["Scar"] = {
 		Damage = 45, Cooldown = 0.1, Range = 650, MaxAmmo = 30, ReloadTime = 1.6, Spread = 5, AutoFire = true,
 		Shake = { Intensity = 1.0, Decay = 10 },
+		Recoil = { Pitch = 1.8, Yaw = 0.55 },
+		Aim = { FOV = 55, SpreadMultiplier = 0.4 },
 		Animations = { Shoot = 133379495548916, Reload = 116854355282803, Idle = 127694603378551, Walk = 116073209021469, Sprint = 116073209021469 }
 	},
 	["Shotgun"] = {
 		Damage = 35, Cooldown = 0.6, Range = 300, MaxAmmo = 8, ReloadTime = 0.8, ReloadPerShell = true, Spread = 30, Pellets = 8,
 		Shake = { Intensity = 3.5, Decay = 8 },
+		Recoil = { Pitch = 5.0, Yaw = 1.2 },
+		Aim = { FOV = 62, SpreadMultiplier = 0.6 },
 		Animations = { Shoot = 140337976272295, Reload = 84283526160957, Idle = 128036426437584, Walk = 113147747937745, Sprint = 113147747937745 }
 	}
 }

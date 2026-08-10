@@ -113,6 +113,74 @@ function FXUtil.LandImpact(position)
 	end
 end
 
+-- Resolves where a gun's muzzle is without hard part-name dependencies - the reference
+-- gunsystem dot-indexed .Muzzle and crashed on any gun that lacked it. Resolution order:
+-- an Attachment named MuzzlePoint or Muzzle anywhere in the tool, then a BasePart whose
+-- name contains "muzzle", then the front face of the handle, then the handle itself.
+-- Always returns a world position; never yields, never throws.
+function FXUtil.GetMuzzlePosition(tool)
+	if not tool then return nil end
+
+	local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)
+	if not handle then return nil end
+
+	-- Named muzzle points win, but only when they are actually near the handle: a gun
+	-- cloned out of storage can carry decorative parts that were never welded into the
+	-- assembly, and a muzzle hundreds of studs away is worse than no muzzle at all.
+	local MAX_MUZZLE_OFFSET = 15
+
+	for _, d in tool:GetDescendants() do
+		if d:IsA("Attachment") and (d.Name == "MuzzlePoint" or d.Name == "Muzzle") then
+			local position = d.WorldPosition
+			if (position - handle.Position).Magnitude <= MAX_MUZZLE_OFFSET then
+				return position
+			end
+		end
+	end
+
+	for _, d in tool:GetDescendants() do
+		if d:IsA("BasePart") and string.find(string.lower(d.Name), "muzzle") then
+			if (d.Position - handle.Position).Magnitude <= MAX_MUZZLE_OFFSET then
+				return d.Position
+			end
+		end
+	end
+
+	return handle.Position + handle.CFrame.LookVector * (handle.Size.Z / 2)
+end
+
+-- Red burst where a bullet lands on a character. Caller gates on the Blood Effects
+-- setting, since this module is also required in contexts with no settings UI.
+function FXUtil.BodyHit(position, isHeadshot)
+	if not position then return end
+
+	local emitterPart = makeEffectPart(Enum.PartType.Ball)
+	emitterPart.Transparency = 1
+	emitterPart.Size = Vector3.new(0.3, 0.3, 0.3)
+	emitterPart.CFrame = CFrame.new(position)
+
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Color = ColorSequence.new(Color3.fromRGB(190, 25, 25), Color3.fromRGB(120, 10, 10))
+	emitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, isHeadshot and 0.55 or 0.35),
+		NumberSequenceKeypoint.new(1, 0.1),
+	})
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.1),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Lifetime = NumberRange.new(0.2, 0.4)
+	emitter.Speed = NumberRange.new(8, isHeadshot and 18 or 12)
+	emitter.SpreadAngle = Vector2.new(180, 180)
+	emitter.Acceleration = Vector3.new(0, -40, 0)
+	emitter.Enabled = false
+	emitter.Parent = emitterPart
+
+	emitterPart.Parent = effectsFolder()
+	emitter:Emit(isHeadshot and 18 or 10)
+	Debris:AddItem(emitterPart, 1)
+end
+
 -- One Trail per character, between two vertical attachments on the root. The caller
 -- toggles .Enabled by speed; recreating per toggle would leak attachments.
 function FXUtil.EnsureSpeedTrail(root)

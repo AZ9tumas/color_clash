@@ -10,6 +10,7 @@ local CombatRemotes = require(Shared.Remotes.CombatRemotes)
 local CrosshairController = require(Shared.UIControllers.CrosshairController)
 local MainHudController = require(Shared.UIControllers.MainHudController)
 local RaycastUtil = require(Shared.Modules.Utils.RaycastUtil)
+local CameraFX = require(Shared.Modules.Utils.CameraFX)
 
 local ToolConnections = CombatRemotes.GetToolConnections()
 local player = Players.LocalPlayer
@@ -28,6 +29,8 @@ function WeaponClient.new(tool, onRecoil)
 	self.isReloading = false
 	self.cancelReloadFlag = false
 	self.isHolding = false
+	self.isAiming = false
+	self.aimConnections = {}
 	self.lastUsed = 0
 
 	self.idleTrack = nil
@@ -70,6 +73,18 @@ local function getAnimationTrack(humanoid, animId)
 	return animator:LoadAnimation(anim)
 end
 
+function WeaponClient:SetAiming(aiming)
+	if aiming == self.isAiming then return end
+	if aiming and (self.isReloading or not self.isEquipped) then return end
+
+	self.isAiming = aiming
+	if aiming then
+		CameraFX.SetAim(self.data.Aim and self.data.Aim.FOV or 55)
+	else
+		CameraFX.ClearAim()
+	end
+end
+
 function WeaponClient:Equip()
 	self.isEquipped = true
 	self.cancelReloadFlag = false
@@ -77,6 +92,22 @@ function WeaponClient:Equip()
 
 	self:UpdateUI()
 	if self.data.MaxAmmo then CrosshairController.SetCrosshairVisible(true) end
+
+	-- Aim down sights on right mouse, guns only. Bound per equip and torn down on
+	-- unequip so a holstered gun can never hold the camera zoomed.
+	if self.data.MaxAmmo and self.data.Aim then
+		table.insert(self.aimConnections, UserInputService.InputBegan:Connect(function(input, processed)
+			if processed then return end
+			if input.UserInputType == Enum.UserInputType.MouseButton2 then
+				self:SetAiming(true)
+			end
+		end))
+		table.insert(self.aimConnections, UserInputService.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton2 then
+				self:SetAiming(false)
+			end
+		end))
+	end
 
 	local char = player.Character
 	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -161,6 +192,12 @@ function WeaponClient:Unequip()
 	self.cancelReloadFlag = true
 	self.isHolding = false
 
+	self:SetAiming(false)
+	for _, connection in self.aimConnections do
+		connection:Disconnect()
+	end
+	table.clear(self.aimConnections)
+
 	CrosshairController.SetCrosshairVisible(false)
 	MainHudController.SetWeaponInfo("N/A", "N/A")
 
@@ -218,6 +255,7 @@ function WeaponClient:Reload()
 	if not self.data.MaxAmmo or self.isReloading or self.ammo == self.data.MaxAmmo then return end
 	self.isReloading = true
 	self.cancelReloadFlag = false
+	self:SetAiming(false)
 
 	local handle = self.tool:FindFirstChild("Handle") or self.tool:FindFirstChildWhichIsA("BasePart", true)
 	local reloadSFX = handle and handle:FindFirstChild("ReloadSFX")
@@ -313,10 +351,28 @@ function WeaponClient:Fire()
 			handle.MeleeSwingSound:Play()
 		end
 
-		local amount = self.data.Shake and self.data.Shake.Intensity and (self.data.Shake.Intensity * 0.015) or 0.03
-		if self.onRecoil then self.onRecoil(amount) end
+		-- Spring recoil, from the reference gunsystem: random per-axis kick that the
+		-- spring recovers from on its own. Aiming steadies the hand; melee weapons have
+		-- no Recoil config and fall back to a nudge derived from their swing shake.
+		local recoil = self.data.Recoil
+		if recoil then
+			local steady = self.isAiming and 0.55 or 1
+			CameraFX.Recoil(Vector3.new(
+				recoil.Pitch * steady,
+				recoil.Yaw * steady * (math.random() < 0.5 and -1 or 1) * math.random(),
+				0
+			))
+			CameraFX.FirePulse((self.data.Shake and self.data.Shake.Intensity or 1) * 2.5)
+		elseif self.data.Shake then
+			CameraFX.Recoil(Vector3.new(self.data.Shake.Intensity * 0.8, 0, 0))
+		end
 
-		ToolConnections:FireServer(self.tool.Name, self:GetTargetPosition())
+		-- Controller vibration still routes through the CombatClient callback.
+		if self.onRecoil then
+			self.onRecoil((self.data.Shake and self.data.Shake.Intensity or 1) * 0.015)
+		end
+
+		ToolConnections:FireServer(self.tool.Name, self:GetTargetPosition(), self.isAiming)
 	end
 end
 

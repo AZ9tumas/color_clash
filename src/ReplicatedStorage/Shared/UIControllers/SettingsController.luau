@@ -509,8 +509,13 @@ function SettingsController.Init()
 		local baseFov = SettingsController.GetValue("Field of View") or 70
 		local targetFov = baseFov
 		local isPlaying = player:GetAttribute("IsPlaying") == true
-		
-		if SettingsController.GetValue("Dynamic FOV") and isPlaying then
+
+		-- Aiming down sights (set locally by CameraFX) overrides everything else,
+		-- including Dynamic FOV - a sniper scope must not wobble with run speed.
+		local aimFov = player:GetAttribute("AimFOV")
+		if type(aimFov) == "number" then
+			targetFov = aimFov
+		elseif SettingsController.GetValue("Dynamic FOV") and isPlaying then
 			local char = player.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
 			local hum = char and char:FindFirstChild("Humanoid")
