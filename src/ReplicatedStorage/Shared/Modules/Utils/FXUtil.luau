@@ -225,7 +225,7 @@ function FXUtil.SlideStart(part)
 	FXUtil.PlaySoundAt(config.Sound, part, config.SoundVolume)
 end
 
-function FXUtil.MuzzleFlash(position)
+function FXUtil.MuzzleFlash(position, scale)
 	local config = FXConfig.MuzzleFlash
 	if not config.Enabled or not position then return end
 
@@ -233,15 +233,18 @@ function FXUtil.MuzzleFlash(position)
 	if now - lastMuzzleFlash < (config.Throttle or 0) then return end
 	lastMuzzleFlash = now
 
+	scale = scale or 1
+	local size = config.Size * scale
+
 	local flash = makeEffectPart(Enum.PartType.Ball)
 	flash.Name = "MuzzleFlash"
 	flash.Color = config.Color
-	flash.Size = Vector3.new(config.Size, config.Size, config.Size)
+	flash.Size = Vector3.new(size, size, size)
 	flash.CFrame = CFrame.new(position)
 
 	local light = Instance.new("PointLight")
 	light.Color = config.Color
-	light.Range = config.LightRange
+	light.Range = config.LightRange * scale
 	light.Brightness = config.LightBrightness
 	light.Parent = flash
 
@@ -252,6 +255,34 @@ function FXUtil.MuzzleFlash(position)
 	TweenService:Create(light, info, {Brightness = 0}):Play()
 
 	Debris:AddItem(flash, config.Duration + 0.1)
+end
+
+-- Brass casing flicked out to the shooter's right with spin. Pure dressing, so it is
+-- physics-inert to everything else: no collisions with characters, no raycast presence.
+function FXUtil.EjectShell(position, rightVector)
+	if not position then return end
+
+	local shell = Instance.new("Part")
+	shell.Name = "ShellCasing"
+	shell.Size = Vector3.new(0.12, 0.12, 0.34)
+	shell.Color = Color3.fromRGB(200, 160, 60)
+	shell.Material = Enum.Material.Metal
+	shell.CanCollide = false
+	shell.CanQuery = false
+	shell.CanTouch = false
+	shell.Massless = true
+	shell.CFrame = CFrame.new(position) * CFrame.Angles(math.random(), math.random(), math.random())
+
+	local direction = (rightVector or Vector3.xAxis)
+	shell.AssemblyLinearVelocity = direction * (8 + math.random() * 5) + Vector3.new(0, 9 + math.random() * 4, 0)
+	shell.AssemblyAngularVelocity = Vector3.new(math.random(-30, 30), math.random(-30, 30), math.random(-30, 30))
+
+	shell.Parent = effectsFolder()
+
+	TweenService:Create(shell, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		Transparency = 1,
+	}):Play()
+	Debris:AddItem(shell, 0.9)
 end
 
 -- Expanding shockwave ring under the player, plus a whoosh.

@@ -46,9 +46,17 @@ local function updateRecoilSpring(dt)
 	camera.CFrame = camera.CFrame * CFrame.Angles(springPosition.X, springPosition.Y, springPosition.Z)
 end
 
+-- Visual recoil: the spring kick that snaps and recovers, plus an FOV punch. The
+-- PERMANENT aim displacement lives in FirstPersonRig.ApplyAimKick - only the rig owns
+-- camera state that survives across frames, so it is the only place a lasting kick can
+-- exist. The FOV punch exploits the settings loop: it lerps FieldOfView back toward
+-- its target every frame, so a one-line bump gives a decaying zoom-out kick for free.
+--
 -- kickDegrees: X pitch (positive kicks up), Y yaw, Z roll.
 function CameraFX.Recoil(kickDegrees)
 	if not SettingsController.GetValue("Camera Shake") then return end
+
+	camera.FieldOfView += math.min(kickDegrees.X * 0.5, 4)
 
 	springVelocity = springVelocity + Vector3.new(
 		math.rad(kickDegrees.X),

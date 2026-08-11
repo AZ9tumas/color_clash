@@ -154,6 +154,13 @@ local function applyMoveSpeed()
 	if not hum then return end
 
 	local speed = airSpeed or groundSpeedForState()
+
+	-- Aiming down sights slows movement, set by GunHandler while ADS is held.
+	local aimSlow = player:GetAttribute("AimSlowMultiplier")
+	if type(aimSlow) == "number" then
+		speed = speed * math.clamp(aimSlow, 0.2, 1)
+	end
+
 	hum.WalkSpeed = speed
 
 	local remoteState = string.find(currentState, "WallRun") and "WallRun" or currentState
@@ -463,6 +470,8 @@ function MovementClient.Init()
 	if player.Character then
 		onCharacterAdded(player.Character)
 	end
+
+	player:GetAttributeChangedSignal("AimSlowMultiplier"):Connect(applyMoveSpeed)
 
 	player:GetAttributeChangedSignal("IsPlaying"):Connect(function()
 		if player:GetAttribute("IsPlaying") ~= true then
@@ -875,7 +884,10 @@ function MovementClient.Init()
 			camera.CFrame = camera.CFrame * CFrame.Angles(0, 0, math.rad(currentRoll))
 		end
 
-		local isEquipped = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+		-- "Something else is steering the character's facing": the gun rig says so outright,
+		-- melee/first-person is still inferred from the mouse lock it sets.
+		local isEquipped = player:GetAttribute("GunCameraActive") == true
+			or UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
 
 		if isPlaying and isAlive then
 			if isVaulting then

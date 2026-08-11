@@ -19,10 +19,25 @@ local KillFeedEvent = RoundRemotes.GetKillFeedEvent()
 
 local WeaponServer = {}
 
-function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourcePlayer, toolName)
+-- The kill feed is fed from here rather than from the death flow because this is where
+-- the shot's own context still exists - which gun, and whether it was a headshot. Teams
+-- ride along so each client can colour the row from its own point of view.
+local function announceKill(sourceName, sourcePlayer, victimName, victimPlayer, toolName, isHeadshot, reward)
+	KillFeedEvent:FireAllClients({
+		Killer = sourceName,
+		KillerTeam = sourcePlayer and sourcePlayer:GetAttribute("Team") or nil,
+		Victim = victimName,
+		VictimTeam = victimPlayer and victimPlayer:GetAttribute("Team") or nil,
+		Weapon = toolName or "Unknown Weapon",
+		Headshot = isHeadshot == true,
+		Reward = reward,
+	})
+end
+
+function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourcePlayer, toolName, isHeadshot)
 	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
 	local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
-	
+
 	if not humanoid or humanoid.Health <= 0 then return false end
 
 	-- Friendly fire. ProcessDamage is the single funnel for melee and hitscan alike, so
@@ -45,8 +60,9 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 				humanoid.Health = humanoid.MaxHealth
 				
 				local currentKills = 1
+				local killReward = nil
 				if sourcePlayer then
-					currentKills = RewardManager.ProcessKill(sourcePlayer)
+					currentKills, killReward = RewardManager.ProcessKill(sourcePlayer)
 				end
 
 				local hrp = targetCharacter:FindFirstChild("HumanoidRootPart")
@@ -69,7 +85,7 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 				PlayerUtil.RagdollAndTeleport(targetPlayer, lobbySpawn, kbVelocity)
 				
 				RewardManager.ProcessDeath(targetPlayer, sourceName, toolName or "Unknown Weapon", currentKills)
-				KillFeedEvent:FireAllClients(sourceName, targetPlayer.Name)
+				announceKill(sourceName, sourcePlayer, targetPlayer.Name, targetPlayer, toolName, isHeadshot, killReward)
 				return true
 			else
 				humanoid:TakeDamage(damage)
@@ -79,8 +95,8 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 		if humanoid.Health - damage <= 0 then
 			humanoid.Health = 0
 			if sourcePlayer then
-				RewardManager.ProcessKill(sourcePlayer)
-				KillFeedEvent:FireAllClients(sourceName, targetCharacter.Name)
+				local _, killReward = RewardManager.ProcessKill(sourcePlayer)
+				announceKill(sourceName, sourcePlayer, targetCharacter.Name, nil, toolName, isHeadshot, killReward)
 			end
 			return true
 		else
@@ -191,7 +207,7 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming)
 			if targetChar and targetChar:FindFirstChildOfClass("Humanoid") then
 				local isHeadshot = result.Instance.Name == "Head"
 				local damage = isHeadshot and data.Damage * 2 or data.Damage
-				local killed = WeaponServer.ProcessDamage(targetChar, damage, player.Name, player, toolName)
+				local killed = WeaponServer.ProcessDamage(targetChar, damage, player.Name, player, toolName, isHeadshot)
 				DamageVFX:FireClient(player, visualTarget, tostring(damage), result.Instance, result.Normal, killed == true)
 			end
 		end

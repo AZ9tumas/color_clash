@@ -11,7 +11,7 @@ local MainHudController = require(Shared.UIControllers.MainHudController)
 local RaycastUtil = require(Shared.Modules.Utils.RaycastUtil)
 local CameraFX = require(Shared.Modules.Utils.CameraFX)
 local FXUtil = require(Shared.Modules.Utils.FXUtil)
-local ThirdPersonRig = require(Shared.Classes.ThirdPersonRig)
+local FirstPersonRig = require(Shared.Classes.FirstPersonRig)
 
 local SoundService = game:GetService("SoundService")
 local FXConfig = require(Shared.Modules.Core.FXConfig)
@@ -55,7 +55,7 @@ function GunHandler.New(tool)
 		isAiming = false,
 		cancelReload = false,
 
-		rig = ThirdPersonRig.new(tool, data.Rig),
+		rig = FirstPersonRig.new(tool, data.Rig),
 		continuousFireConn = nil,
 
 		tracks = {},
@@ -115,12 +115,16 @@ function gun:_fireOnce()
 	local recoil = self.Properties.Recoil or { Pitch = 1.5, Yaw = 0.5 }
 	local steady = self.isAiming and 0.5 or 1
 
-	-- Layered fire feedback: arm/gun kick (rig joints), camera spring kick, rotational
-	-- shake for body, blur pulse, and an instant local muzzle flash - the server tracer
-	-- arrives a beat later, and that beat is the difference between crisp and mushy.
+	-- COD recoil split: ~40% of the kick is written into the rig's aim state and STAYS
+	-- until the player pulls back down; the rest is spring/shake/FOV that recovers on
+	-- its own. Yaw drifts randomly so sustained fire wanders, not just climbs.
+	self.rig:ApplyAimKick(
+		recoil.Pitch * 0.4 * steady,
+		recoil.Yaw * 0.4 * steady * (math.random() * 2 - 1)
+	)
 	self.rig:applyRecoilImpulse(Vector3.new(
-		recoil.Pitch * 7 * steady,
-		recoil.Yaw * 7 * steady * (math.random() < 0.5 and -1 or 1),
+		recoil.Pitch * 8 * steady,
+		recoil.Yaw * 8 * steady * (math.random() < 0.5 and -1 or 1),
 		0
 	))
 	CameraFX.Recoil(Vector3.new(
@@ -128,9 +132,16 @@ function gun:_fireOnce()
 		recoil.Yaw * steady * (math.random() < 0.5 and -1 or 1) * math.random(),
 		0
 	))
-	CameraFX.Shake(Vector3.new(recoil.Pitch * 0.25, 0, recoil.Pitch * 0.2), 0.18, 0.75)
+	CameraFX.Shake(Vector3.new(recoil.Pitch * 0.3, 0, recoil.Pitch * 0.25), 0.18, 0.75)
 	CameraFX.FirePulse((self.Properties.Shake and self.Properties.Shake.Intensity or 1) * 2.5)
-	FXUtil.MuzzleFlash(FXUtil.GetMuzzlePosition(self.tool))
+
+	-- Instant local fire dressing: muzzle flash scaled by the gun's punch, plus an
+	-- ejected shell. The server tracer arrives a beat later; this beat is the
+	-- difference between crisp and mushy.
+	local muzzlePos = FXUtil.GetMuzzlePosition(self.tool)
+	local intensity = self.Properties.Shake and self.Properties.Shake.Intensity or 1
+	FXUtil.MuzzleFlash(muzzlePos, 0.8 + intensity * 0.35)
+	FXUtil.EjectShell(muzzlePos, camera.CFrame.RightVector)
 
 	if self.tracks.Shoot then self.tracks.Shoot:Play(0.05) end
 
@@ -194,6 +205,8 @@ function gun:ADS()
 	self.rig:StartADS()
 	CameraFX.SetAim(self.Properties.Aim and self.Properties.Aim.FOV or 55)
 	FXUtil.PlaySoundAt("AimIn", SoundService)
+	-- COD standard: aiming slows you down. MovementClient reads this attribute.
+	player:SetAttribute("AimSlowMultiplier", 0.55)
 end
 
 function gun:stopADS()
@@ -202,6 +215,7 @@ function gun:stopADS()
 	self.rig:StopADS()
 	CameraFX.ClearAim()
 	FXUtil.PlaySoundAt("AimIn", SoundService, 0.6)
+	player:SetAttribute("AimSlowMultiplier", nil)
 end
 
 function gun:Reload()

@@ -365,8 +365,8 @@ function CombatClient.Init()
 		end
 	end)
 
-	RoundRemotes.GetKillFeedEvent().OnClientEvent:Connect(function(killerName, victimName)
-		if killerName == player.Name then
+	RoundRemotes.GetKillFeedEvent().OnClientEvent:Connect(function(entry)
+		if type(entry) == "table" and entry.Killer == player.Name then
 			CrosshairController.ShowHitMarker(3)
 			-- The "Kill Sound Effect" toggle has existed in Settings since day one but was
 			-- never wired to anything; this is its implementation.
@@ -450,7 +450,11 @@ function CombatClient.Init()
 		else
 			currentSwayX = 0
 			currentSwayY = 0
-			if char then
+			-- FirstPersonRig owns local body transparency while a gun is out (it hides the
+			-- head you would otherwise be looking through). This loop runs on RenderStepped,
+			-- after the rig's render-step bind, so restoring everything here would undo the
+			-- rig's work every frame.
+			if char and not player:GetAttribute("GunCameraActive") then
 				for _, p in char:GetDescendants() do
 					if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
 						p.LocalTransparencyModifier = 0
@@ -466,7 +470,12 @@ function CombatClient.Init()
 
 		local moveState = player:GetAttribute("MovementState")
 
-		if shouldForceManualRot then
+		if player:GetAttribute("GunCameraActive") then
+			-- FirstPersonRig owns the mouse lock, AutoRotate and root yaw while a gun is
+			-- out. This loop is RenderStepped, which fires after every BindToRenderStep
+			-- callback, so writing MouseBehavior here overwrites the rig's LockCenter every
+			-- single frame - and an unlocked mouse reports no delta, which is aiming dead.
+		elseif shouldForceManualRot then
 			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 
 			if root and isAlive then

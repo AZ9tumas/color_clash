@@ -16,11 +16,11 @@ function RewardManager.ProcessKill(killer)
 	killer:SetAttribute("Kills", currentKills)
 	CurrencyServer.AddKills(killer, 1)
 	
-	local killReward = math.random(RewardConfig.Kill.Min, RewardConfig.Kill.Max)
+	local killReward = RewardConfig.Kill.Amount
 	CurrencyServer.AddCash(killer, killReward)
 	killer:SetAttribute("RoundCash", (killer:GetAttribute("RoundCash") or 0) + killReward)
-	
-	return currentKills
+
+	return currentKills, killReward
 end
 
 function RewardManager.ProcessDeath(victim, killerName, weaponName, victimsCount)

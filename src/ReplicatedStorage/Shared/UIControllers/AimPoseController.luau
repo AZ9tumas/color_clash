@@ -3,7 +3,7 @@ local RunService = game:GetService("RunService")
 
 -- Poses OTHER players' necks from their replicated AimPitch attribute, so everyone can
 -- read where a gunner is aiming. The local player's own pose is handled by their
--- ThirdPersonRig; this controller deliberately skips them.
+-- FirstPersonRig; this controller deliberately skips them.
 local AimPoseController = {}
 
 local player = Players.LocalPlayer
