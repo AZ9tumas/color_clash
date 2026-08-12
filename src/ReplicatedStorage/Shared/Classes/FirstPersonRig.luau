@@ -23,11 +23,12 @@ end
 --   2. truly permanent recoil - kicks are added straight into the pitch/yaw state, so
 --      the muzzle climb stays until the player pulls it back down.
 -- The eye rides the root at a fixed height rather than the Head part, so hold animations
--- and walk cycles cannot shake the view. The character's own head is hidden locally (it
--- would fill the screen from the inside); arms, torso and legs stay visible, so looking
--- down shows your body and the gun sits in frame where the hold animation puts it. The
--- arms/neck still pose from aim pitch via Motor6D C0 layering, which is what other
--- clients see.
+-- and walk cycles cannot shake the view. What you see of yourself comes from the Viewmodel
+-- class, not from this character - the real body is hidden locally (see
+-- applyBodyVisibility). The neck and shoulders are still posed here from aim pitch, which
+-- costs three joint writes and keeps the rig honest if a gun ever loads without a
+-- viewmodel; what other clients actually render comes from the throttled AimPitch
+-- broadcast at the bottom of _update.
 local handler = {}
 local rig = {}
 rig.__index = rig
@@ -92,25 +93,31 @@ local function restoreJoints(character)
 	end
 end
 
--- Only the local view is touched: LocalTransparencyModifier is client-side, so everyone
--- else still sees a whole character. Decals carry the property too, which is what takes
--- the face off with the head.
-local function isOwnBodyHidden(instance)
+-- Only the local view is touched - LocalTransparencyModifier is client-side, so everyone
+-- else still sees a whole character holding a whole gun. Decals carry the property too,
+-- which is what takes the face along with the head.
+--
+-- Two hiding modes, and which one applies is not cosmetic. With a Viewmodel up, the whole
+-- character goes - tool included - because the viewmodel supplies the arms and gun you
+-- actually see and the real body only clips into them. Without one, hiding everything
+-- would leave the player looking at nothing at all, so only the head and its accessories
+-- go: that is the view you would otherwise be sitting inside.
+local function shouldHide(instance, fullBody)
+	if fullBody then return true end
 	if instance.Name == "Head" then return true end
 
 	local parent = instance.Parent
 	if not parent then return false end
-	-- The face is a Decal parented to the Head, so hiding the part alone leaves a face
-	-- painted across the view. Hats and hair are Accessories, whose Handle sits directly
-	-- under them.
+	-- The face is a Decal parented to the Head; hats and hair are Accessories, whose
+	-- Handle sits directly under them.
 	return parent.Name == "Head" or parent:IsA("Accessory")
 end
 
-local function applyBodyVisibility(character, hidden)
+local function applyBodyVisibility(character, hidden, fullBody)
 	if not character then return end
 	for _, part in character:GetDescendants() do
 		if part:IsA("BasePart") or part:IsA("Decal") then
-			local target = (hidden and isOwnBodyHidden(part)) and 1 or 0
+			local target = (hidden and shouldHide(part, fullBody)) and 1 or 0
 			-- Asserted every frame because the engine and the ragdoll path both reset this,
 			-- but only written on change - a blind write per part per frame is a property
 			-- signal storm for no gain.
@@ -150,6 +157,7 @@ function handler.new(tool, config)
 		isSpringActive = false,
 
 		enabled = false,
+		viewmodelActive = false,
 		bindName = nil,
 		savedCameraType = nil,
 
@@ -177,6 +185,12 @@ function rig:ApplyAimKick(pitchDegrees, yawDegrees)
 	self.yaw = self.yaw - math.rad(yawDegrees)
 end
 
+-- Set by GunHandler once it knows whether a viewmodel was actually built for this gun. It
+-- decides whether the real body is hidden outright or only from the neck up.
+function rig:SetViewmodelActive(active)
+	self.viewmodelActive = active and true or false
+end
+
 function rig:StartADS()
 	self.aiming = true
 	self.offsetSpring.Target = self.adsOffset
@@ -196,6 +210,7 @@ function rig:_update(dt)
 	-- cursor. The server strips the tool a beat after the client returns, so without this
 	-- that round trip is spent with the menu locked out.
 	if player:GetAttribute("InMenu") ~= false then
+		player:SetAttribute("GunCameraActive", false)
 		if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
 			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		end
@@ -207,6 +222,7 @@ function rig:_update(dt)
 	-- ragdoll flights and the death flow keep their normal camera - and their body, since
 	-- watching your own ragdoll fly with the head missing is worse than the alternative.
 	if not root or not humanoid or humanoid.Health <= 0 or character:GetAttribute("Ragdolled") then
+		player:SetAttribute("GunCameraActive", false)
 		if camera.CameraType ~= Enum.CameraType.Custom then
 			camera.CameraType = Enum.CameraType.Custom
 		end
@@ -218,6 +234,11 @@ function rig:_update(dt)
 		applyBodyVisibility(character, false)
 		return
 	end
+	-- Per-frame truth, not just a lifecycle flag: the two branches above hand the camera
+	-- back mid-equip, and everything downstream (CombatClient's hands-off check, the
+	-- Viewmodel's own visibility) has to follow that within the same frame.
+	player:SetAttribute("GunCameraActive", true)
+
 	if camera.CameraType ~= Enum.CameraType.Scriptable then
 		camera.CameraType = Enum.CameraType.Scriptable
 	end
@@ -267,7 +288,7 @@ function rig:_update(dt)
 	camera.CFrame = CFrame.lookAlong(eyePosition, rotation.LookVector)
 	camera.Focus = camera.CFrame
 
-	applyBodyVisibility(character, true)
+	applyBodyVisibility(character, true, self.viewmodelActive)
 
 	-- Character yaw tracks the aim exactly, not on a lerp: in first person the arms and
 	-- the gun hang off the torso, so a body that eases into position drags the weapon

@@ -12,6 +12,7 @@ local RaycastUtil = require(Shared.Modules.Utils.RaycastUtil)
 local CameraFX = require(Shared.Modules.Utils.CameraFX)
 local FXUtil = require(Shared.Modules.Utils.FXUtil)
 local FirstPersonRig = require(Shared.Classes.FirstPersonRig)
+local Viewmodel = require(Shared.Classes.Viewmodel)
 
 local SoundService = game:GetService("SoundService")
 local FXConfig = require(Shared.Modules.Core.FXConfig)
@@ -56,6 +57,7 @@ function GunHandler.New(tool)
 		cancelReload = false,
 
 		rig = FirstPersonRig.new(tool, data.Rig),
+		viewmodel = nil,
 		continuousFireConn = nil,
 
 		tracks = {},
@@ -127,6 +129,16 @@ function gun:_fireOnce()
 		recoil.Yaw * 8 * steady * (math.random() < 0.5 and -1 or 1),
 		0
 	))
+	if self.viewmodel then
+		-- Same event, one more surface. The reference drives the viewmodel far harder than
+		-- the camera - its own numbers are roughly 10x the camera impulse - because the gun
+		-- is what the eye is actually tracking.
+		self.viewmodel:applyRecoilImpulse(Vector3.new(
+			recoil.Pitch * 10 * steady,
+			recoil.Yaw * 8 * steady * (math.random() * 2 - 1),
+			0
+		))
+	end
 	CameraFX.Recoil(Vector3.new(
 		recoil.Pitch * steady,
 		recoil.Yaw * steady * (math.random() < 0.5 and -1 or 1) * math.random(),
@@ -138,8 +150,18 @@ function gun:_fireOnce()
 	-- Instant local fire dressing: muzzle flash scaled by the gun's punch, plus an
 	-- ejected shell. The server tracer arrives a beat later; this beat is the
 	-- difference between crisp and mushy.
-	local muzzlePos = FXUtil.GetMuzzlePosition(self.tool)
+	--
+	-- Preference matters here. The real tool is welded to a character that is fully
+	-- transparent and sitting behind the camera, so a flash at its muzzle lights empty air
+	-- while the gun on screen stays dark. The viewmodel's own muzzle is the one the player
+	-- is looking down, so it wins whenever the weapon has the part for it.
 	local intensity = self.Properties.Shake and self.Properties.Shake.Intensity or 1
+	local muzzlePos = (self.viewmodel and self.viewmodel:GetMuzzlePosition())
+		or FXUtil.GetMuzzlePosition(self.tool)
+
+	if self.viewmodel then
+		self.viewmodel:MuzzleFlash(math.clamp(0.75 + intensity * 0.25, 0, 1))
+	end
 	FXUtil.MuzzleFlash(muzzlePos, 0.8 + intensity * 0.35)
 	FXUtil.EjectShell(muzzlePos, camera.CFrame.RightVector)
 
@@ -203,6 +225,7 @@ function gun:ADS()
 	log("%s ADS in (FOV %s)", self.tool.Name, tostring(self.Properties.Aim and self.Properties.Aim.FOV or 55))
 	self.isAiming = true
 	self.rig:StartADS()
+	if self.viewmodel then self.viewmodel:StartADS() end
 	CameraFX.SetAim(self.Properties.Aim and self.Properties.Aim.FOV or 55)
 	FXUtil.PlaySoundAt("AimIn", SoundService)
 	-- COD standard: aiming slows you down. MovementClient reads this attribute.
@@ -213,6 +236,7 @@ function gun:stopADS()
 	if not self.isAiming then return end
 	self.isAiming = false
 	self.rig:StopADS()
+	if self.viewmodel then self.viewmodel:StopADS() end
 	CameraFX.ClearAim()
 	FXUtil.PlaySoundAt("AimIn", SoundService, 0.6)
 	player:SetAttribute("AimSlowMultiplier", nil)
@@ -256,6 +280,41 @@ end
 function gun:Equip()
 	self.isEquipped = true
 	self.cancelReload = false
+
+	-- Viewmodel first: whether one exists decides whether the rig hides the real body
+	-- outright or only from the neck up, and the rig reads that on its first frame.
+	--
+	-- The reference's arrangement: one shared arm rig, and the weapon cloned into it on
+	-- equip and jointed to the hand. The grip offset is per gun because every model has its
+	-- handle in a different place and pointing a different way.
+	local viewmodelConfig = self.Properties.Viewmodel
+	self.viewmodel = Viewmodel.new(viewmodelConfig)
+
+	if self.viewmodel then
+		local gunClone = self.tool:Clone()
+		-- A Tool inside a plain Model is inert, but strip the script side anyway so nothing
+		-- in the copy tries to run or make noise.
+		for _, descendant in gunClone:GetDescendants() do
+			if descendant:IsA("BaseScript") or descendant:IsA("Sound") then
+				descendant:Destroy()
+			end
+		end
+
+		local grip = viewmodelConfig and viewmodelConfig.GripOffset or CFrame.new()
+		if not self.viewmodel:AttachGun(gunClone, grip) then
+			gunClone:Destroy()
+			self.viewmodel:Destroy()
+			self.viewmodel = nil
+		end
+	end
+
+	if self.viewmodel then
+		self.viewmodel:Enable()
+	else
+		warn(string.format("[Gun] no viewmodel for %q - falling back to the real arms", self.tool.Name))
+	end
+
+	self.rig:SetViewmodelActive(self.viewmodel ~= nil)
 
 	self.rig:Enable()
 	self:updateUI()
@@ -311,6 +370,12 @@ function gun:Unequip()
 	self:stopShoot()
 	self:stopADS()
 	self.rig:Disable()
+
+	if self.viewmodel then
+		self.viewmodel:Destroy()
+		self.viewmodel = nil
+	end
+	self.rig:SetViewmodelActive(false)
 
 	if self.moveAnimConn then
 		self.moveAnimConn:Disconnect()

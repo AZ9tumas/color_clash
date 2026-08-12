@@ -33,6 +33,17 @@ local climbEndTime = 0
 
 local isVaulting = false
 
+-- Module scope so the viewmodel can read it. The roll is written into the camera from this
+-- module's RenderStepped loop, which fires after every BindToRenderStep callback - so a
+-- viewmodel positioned in the camera phase is looking at a camera that has not been rolled
+-- yet, and has to apply the same roll itself or visibly detach while strafing.
+local currentRoll = 0
+
+-- Camera roll in degrees, as applied to the camera this frame. Read by the viewmodel.
+function MovementClient.GetCameraRoll()
+	return currentRoll
+end
+
 local airSpeed = nil
 local wasGrounded = true
 local fallSpeed = 0
@@ -411,7 +422,7 @@ function MovementClient.Init()
 	
 	local function onCharacterAdded(c)
 		char = c
-		hum = char:WaitForChild("Humanoid")
+		hum = char:WaitForChild("Humanoid") :: Humanoid
 		root = char:WaitForChild("HumanoidRootPart")
 
 		rootJoint = root:FindFirstChild("RootJoint")
@@ -846,8 +857,6 @@ function MovementClient.Init()
 		end
 	end)
 
-	local currentRoll = 0
-	
 	RunService.RenderStepped:Connect(function(dt)
 		if not hum or not root then return end
 		if char and char:GetAttribute("Ragdolled") then return end

@@ -11,11 +11,28 @@ local HitPartMechanic = {}
 local PART_NAME = "hit part"
 local THICKNESS = 1
 
+-- How far below the arena's lowest point the pad sits.
+--
+-- It used to sit at y = 0, level with the bottom of the map, which made "slightly below the
+-- floor" and "fell off the map" the same event. A player wedged between two cells, or
+-- clipped a stud under one by the solver, was eliminated while still standing on the arena.
+-- With a 50 stud gap only an actual fall reaches it - roughly 0.7s of falling under default
+-- gravity, which also reads better than blinking out the instant a cell disappears.
+--
+-- Measured from the map rather than hardcoded, so it stays correct if the arena is ever
+-- built at a different height.
+local DROP_CLEARANCE = 50
+
+-- Falling 50 studs further is 50 studs more horizontal drift, so the pad grows to keep the
+-- coverage it had when it sat directly under the map. Anything that still misses it is
+-- caught by the Died/destroyed-root recovery in RoundServer.
+local EDGE_MARGIN = 60
+
 -- Axis-aligned world bounds across every BasePart under the map. Works for any grid
 -- size and stays correct if individual cells are rotated, since each part contributes
 -- its projected half-extents rather than its raw Size.
 local function measureMap(map)
-	local minX, maxX, minZ, maxZ
+	local minX, maxX, minZ, maxZ, minY
 
 	for _, part in map:GetDescendants() do
 		if part:IsA("BasePart") then
@@ -25,6 +42,9 @@ local function measureMap(map)
 			local halfX = math.abs(cf.RightVector.X) * size.X / 2
 				+ math.abs(cf.UpVector.X) * size.Y / 2
 				+ math.abs(cf.LookVector.X) * size.Z / 2
+			local halfY = math.abs(cf.RightVector.Y) * size.X / 2
+				+ math.abs(cf.UpVector.Y) * size.Y / 2
+				+ math.abs(cf.LookVector.Y) * size.Z / 2
 			local halfZ = math.abs(cf.RightVector.Z) * size.X / 2
 				+ math.abs(cf.UpVector.Z) * size.Y / 2
 				+ math.abs(cf.LookVector.Z) * size.Z / 2
@@ -33,11 +53,12 @@ local function measureMap(map)
 			maxX = math.max(maxX or (pos.X + halfX), pos.X + halfX)
 			minZ = math.min(minZ or (pos.Z - halfZ), pos.Z - halfZ)
 			maxZ = math.max(maxZ or (pos.Z + halfZ), pos.Z + halfZ)
+			minY = math.min(minY or (pos.Y - halfY), pos.Y - halfY)
 		end
 	end
 
 	if not minX then return nil end
-	return minX, maxX, minZ, maxZ
+	return minX, maxX, minZ, maxZ, minY
 end
 
 local function eliminate(player)
@@ -80,7 +101,7 @@ function HitPartMechanic.Build()
 		existing = Workspace:FindFirstChild(PART_NAME)
 	end
 
-	local minX, maxX, minZ, maxZ = measureMap(map)
+	local minX, maxX, minZ, maxZ, minY = measureMap(map)
 	if not minX then
 		warn("[HitPart] Workspace.Map contains no BaseParts, hit part not created")
 		return nil
@@ -94,8 +115,12 @@ function HitPartMechanic.Build()
 	-- Invisible to raycasts so it cannot be hit by bullets or confuse MovementClient's
 	-- wall-run / vault probes. Touched is physics-driven, so this does not affect it.
 	part.CanQuery = false
-	part.Size = Vector3.new(maxX - minX, THICKNESS, maxZ - minZ)
-	part.Position = Vector3.new((minX + maxX) / 2, 0, (minZ + maxZ) / 2)
+	part.Size = Vector3.new(
+		(maxX - minX) + EDGE_MARGIN * 2,
+		THICKNESS,
+		(maxZ - minZ) + EDGE_MARGIN * 2
+	)
+	part.Position = Vector3.new((minX + maxX) / 2, minY - DROP_CLEARANCE, (minZ + maxZ) / 2)
 	part.Transparency = 1
 	part.CastShadow = false
 	part.Material = Enum.Material.SmoothPlastic
