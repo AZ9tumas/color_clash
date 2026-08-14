@@ -1,32 +1,5 @@
---!strict
 local _T = require(script.Parent.Parent.Types)
 
---[=[
-  @function flatten
-  @within Dictionary
-
-  @param dictionary T -- The dictionary to flatten.
-  @param depth? number -- The depth to flatten the dictionary to.
-  @return T -- The flattened dictionary.
-
-  Flattens a dictionary. If depth is not specified, it will flatten the dictionary as far as it can go.
-
-  ```lua
-  local dictionary = {
-    hello = "world",
-    goodbye = {
-      world = "hello",
-      roblox = {
-        yes = "no",
-        no = "yes",
-      }
-    }
-  }
-
-  local new = Flatten(dictionary) -- { hello = "world", world = "hello", yes = "no", no = "yes" }
-  local new = Flatten(dictionary, 1) -- { hello = "world", world = "hello", roblox = { yes = "no", no = "yes" } }
-  ```
-]=]
 local function flatten(dictionary: _T.AnyDictionary, depth: number?): _T.AnyDictionary
 	depth = if type(depth) == "number" then depth else math.huge
 

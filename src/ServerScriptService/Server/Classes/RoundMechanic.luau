@@ -14,8 +14,6 @@ local rng = Random.new()
 local RoundMechanic = {}
 RoundMechanic.__index = RoundMechanic
 
--- Read by PushServer and CombatServer to decide which action is legal right now, and by
--- PushClient to know when to listen for input. A Workspace attribute replicates for free.
 local PHASE_ATTRIBUTE = "ArenaPhase"
 local PHASE_PUSH = "Push"
 local PHASE_SHOOT = "Shoot"
@@ -37,9 +35,6 @@ function RoundMechanic:Start()
 			return self.roundServer.CurrentState == RoundConfig.States.InGame
 		end
 
-		-- Pace ramp: each completed colour cycle shrinks the timers toward their floors,
-		-- so reaction windows tighten the longer the round runs. cycle is local to this
-		-- thread, so every round starts back at full durations.
 		local cycle = 0
 		local ramp = phases.Ramp or {}
 		local function scaled(base, phaseKey)
@@ -48,7 +43,6 @@ function RoundMechanic:Start()
 			return math.max(floor, math.floor(base * (ramp.Factor or 1) ^ cycle + 0.5))
 		end
 
-		-- Counts down a phase a second at a time, bailing early if the round ends.
 		local function hold(seconds)
 			while seconds > 0 and inGame() do
 				task.wait(1)
@@ -77,21 +71,16 @@ function RoundMechanic:Start()
 
 		task.wait(0.25)
 
-		-- The round opens with every platform up, so it opens push-only.
 		setPhase(PHASE_PUSH)
 		RoundRemotes.GetColorEvent():FireAllClients("Next", phases.PushDuration)
 		hold(phases.PushDuration)
 
 		while inGame() do
-			-- Colour is called while the platforms are still up: time to run for it. The
-			-- ramped duration rides the existing remote, so the HUD countdown just shows it.
+
 			local announceTime = scaled(phases.AnnounceDuration, "Announce")
 			self.roundServer.CurrentColor = colors[rng:NextInteger(1, #colors)]
 			RoundRemotes.GetColorEvent():FireAllClients(self.roundServer.CurrentColor, announceTime)
 
-			-- The last second of the announce window is spent flickering the doomed
-			-- platforms instead of waiting, so the vanish is telegraphed in-world and not
-			-- only by the HUD text. Total time still adds up to announceTime.
 			hold(math.max(announceTime - 1, 0))
 			if not inGame() then break end
 
@@ -130,16 +119,11 @@ function RoundMechanic:Start()
 				end
 			end
 
-			-- Players left standing on a hidden cell now fall onto Workspace["hit part"],
-			-- which eliminates them on touch.
 			task.wait(0.2)
 
-			-- Platforms are gone, so this is the only window where weapons exist.
 			setPhase(PHASE_SHOOT)
 			hold(scaled(phases.HiddenDuration, "Hidden"))
 
-			-- Weapons go away before the platforms come back, so there is no interleaving
-			-- where a player is holding a gun with every platform up.
 			setPhase(PHASE_PUSH)
 
 			for _, data in ipairs(hiddenParts) do
@@ -153,7 +137,6 @@ function RoundMechanic:Start()
 
 			if not inGame() then break end
 
-			-- One full cycle done: everything after this point runs a little faster.
 			cycle += 1
 
 			local pushTime = scaled(phases.PushDuration, "Push")
@@ -174,8 +157,6 @@ function RoundMechanic:Stop()
 
 	Workspace:SetAttribute(PHASE_ATTRIBUTE, nil)
 
-	-- Straggler sweep, restricted to players who were in the game flow. Sweeping
-	-- everyone stripped tools from players sitting in the main menu on every cycle.
 	for _, player in Players:GetPlayers() do
 		if player:GetAttribute("InMenu") == false then
 			PlayerUtil.RemoveWeapons(player)

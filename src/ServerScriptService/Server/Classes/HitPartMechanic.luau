@@ -11,26 +11,10 @@ local HitPartMechanic = {}
 local PART_NAME = "hit part"
 local THICKNESS = 1
 
--- How far below the arena's lowest point the pad sits.
---
--- It used to sit at y = 0, level with the bottom of the map, which made "slightly below the
--- floor" and "fell off the map" the same event. A player wedged between two cells, or
--- clipped a stud under one by the solver, was eliminated while still standing on the arena.
--- With a 50 stud gap only an actual fall reaches it - roughly 0.7s of falling under default
--- gravity, which also reads better than blinking out the instant a cell disappears.
---
--- Measured from the map rather than hardcoded, so it stays correct if the arena is ever
--- built at a different height.
 local DROP_CLEARANCE = 50
 
--- Falling 50 studs further is 50 studs more horizontal drift, so the pad grows to keep the
--- coverage it had when it sat directly under the map. Anything that still misses it is
--- caught by the Died/destroyed-root recovery in RoundServer.
 local EDGE_MARGIN = 60
 
--- Axis-aligned world bounds across every BasePart under the map. Works for any grid
--- size and stays correct if individual cells are rotated, since each part contributes
--- its projected half-extents rather than its raw Size.
 local function measureMap(map)
 	local minX, maxX, minZ, maxZ, minY
 
@@ -73,8 +57,7 @@ local function eliminate(player)
 end
 
 local function onTouched(hit)
-	-- Walk up to the model that actually owns the Humanoid: a hit can land on a limb,
-	-- an accessory handle, or one of the ragdoll colliders parented under a limb.
+
 	local character = hit:FindFirstAncestorWhichIsA("Model")
 	while character and not character:FindFirstChildOfClass("Humanoid") do
 		character = character:FindFirstAncestorWhichIsA("Model")
@@ -87,7 +70,6 @@ local function onTouched(hit)
 	eliminate(player)
 end
 
--- Rebuilt every intermission so it always matches the map currently in Workspace.
 function HitPartMechanic.Build()
 	local map = Workspace:FindFirstChild("Map")
 	if not map then
@@ -112,8 +94,7 @@ function HitPartMechanic.Build()
 	part.Anchored = true
 	part.CanCollide = true
 	part.CanTouch = true
-	-- Invisible to raycasts so it cannot be hit by bullets or confuse MovementClient's
-	-- wall-run / vault probes. Touched is physics-driven, so this does not affect it.
+
 	part.CanQuery = false
 	part.Size = Vector3.new(
 		(maxX - minX) + EDGE_MARGIN * 2,

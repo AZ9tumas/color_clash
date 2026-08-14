@@ -17,7 +17,6 @@ local MainHUD = PlayerGui:WaitForChild("MainHUD")
 local MainMenuBtn = MainHUD:WaitForChild("MainMenuButton")
 local Title = MainMenuBtn:WaitForChild("Title")
 
--- Both button backdrops are named "Frame", so match on position instead of child order.
 local function findBackdrop(button)
 	for _, child in MainHUD:GetChildren() do
 		if child:IsA("Frame") and child.Name == "Frame"
@@ -45,7 +44,7 @@ function MainMenuController.Init()
 	local backdrop = findBackdrop(MainMenuBtn)
 
 	MainMenuBtn.MouseButton1Click:Connect(function()
-		-- Second click during the countdown cancels it.
+
 		if isCounting then
 			reset()
 			return
@@ -69,7 +68,6 @@ function MainMenuController.Init()
 		end)
 	end)
 
-	-- The button is always available, so it only needs its backdrop kept in step with it.
 	if backdrop then
 		MainMenuBtn:GetPropertyChangedSignal("Visible"):Connect(function()
 			backdrop.Visible = MainMenuBtn.Visible

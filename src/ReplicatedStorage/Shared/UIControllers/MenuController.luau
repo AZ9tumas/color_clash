@@ -53,7 +53,6 @@ local function setupMenuButton(frame, unselectedSize, selectedSize, pos)
 		TweenService:Create(title, hoverInfo, {TextColor3 = colorHover}):Play()
 	end)
 
-	-- Menu buttons bypass BindButtonAnimations, so the click sound is added here.
 	btn.MouseButton1Click:Connect(UIAnimations.PlayClick)
 
 	btn.MouseLeave:Connect(function()
@@ -72,8 +71,6 @@ local function closeSubMenu(targetFrame)
 	task.delay(0.15, function() UIAnimations.PopIn(MenuHolder) end)
 end
 
--- Guarded on playClicked alone rather than the InMenu attribute, so returning to the menu
--- can restart it immediately without waiting for the server attribute to replicate back.
 local menuCamConnection = nil
 local function startMenuCamera()
 	if menuCamConnection then menuCamConnection:Disconnect() end
@@ -91,7 +88,6 @@ local function startMenuCamera()
 	end)
 end
 
--- Puts the player back in the state they are in the moment they join.
 function MenuController.ReturnToMenu()
 	playClicked = false
 	Menu.Enabled = true

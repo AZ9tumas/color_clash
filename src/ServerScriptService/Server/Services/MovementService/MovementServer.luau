@@ -9,7 +9,7 @@ local MovementServer = {}
 local function maxAllowedSpeed()
 	local air = MovementConfig.Air
 	local ceiling = air and tonumber(air.MaxAirSpeed) or nil
-	-- Never below the fastest ground speed, or legitimate wall running would be clamped.
+
 	return math.max(ceiling or 0, MovementConfig.Speeds.WallRun, MovementConfig.Speeds.Sprint)
 end
 
@@ -19,9 +19,6 @@ function MovementServer.Init()
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
 		if not hum then return end
 
-		-- The client carries momentum by raising its own WalkSpeed, so it now sends the
-		-- value it wants. Clamped here so this stays the single authority on how fast a
-		-- player can be told to move.
 		if type(speed) == "number" and speed == speed then
 			hum.WalkSpeed = math.clamp(speed, 0, maxAllowedSpeed())
 			return

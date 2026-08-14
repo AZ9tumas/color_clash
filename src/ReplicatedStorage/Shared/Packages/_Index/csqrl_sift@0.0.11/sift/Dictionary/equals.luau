@@ -1,4 +1,3 @@
---!strict
 local Sift = script.Parent.Parent
 
 local Util = require(Sift.Util)
@@ -24,24 +23,6 @@ local function compare(a, b)
 	return true
 end
 
---[=[
-  @function equals
-  @within Dictionary
-
-  @param ... ...{ [any]: any } -- The dictionaries to compare.
-  @return boolean -- Whether the dictionaries are equal.
-
-  Compares two dictionaries for equality.
-
-  ```lua
-  local dictionary = { hello = "world", goodbye = "world" }
-  local other1 = { hello = "world", goodbye = "world" }
-  local other2 = { hello = "hello", world = "goodbye" }
-
-  local value = Equals(dictionary, other1) -- true
-  local value = Equals(dictionary, other1, other2) -- false
-  ```
-]=]
 local function equals(...: _T.AnyDictionary): boolean
 	if Util.equalObjects(...) then
 		return true

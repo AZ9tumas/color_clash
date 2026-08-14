@@ -23,8 +23,6 @@ local SpectatorsText = SpectateFrame:WaitForChild("Spectators")
 
 local SpectateBtn = MainHUD:WaitForChild("SpectateButton")
 
--- Each HUD button has a backdrop Frame and they all share the name "Frame", so pick the
--- one sitting at this button's position rather than trusting child order.
 local SpectateBtnBackground = nil
 for _, child in MainHUD:GetChildren() do
 	if child:IsA("Frame") and child.Name == "Frame"

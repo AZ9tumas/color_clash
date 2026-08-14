@@ -1,7 +1,3 @@
---!optimize 2
---!strict
--- Partial types for Promise
-
 local Packages = script.Parent.Parent
 local Promise: any = if Packages:FindFirstChild("Promise") then (require :: any)(Packages.Promise) else nil
 

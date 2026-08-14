@@ -1,29 +1,7 @@
---!strict
 local Sift = script.Parent.Parent
 
 local None = require(Sift.None)
 
---[=[
-  @function merge
-  @within Dictionary
-
-  @param dictionaries? ...any -- The dictionaries to merge.
-  @return T -- The merged dictionary.
-
-  Merges the given dictionaries into a single dictionary. If the
-  value is `None`, it will be removed from the result. The
-  parameters may be any number of dictionaries or `nil`.
-  Non-dictonaries will be ignored.
-
-  Aliases: `join`
-
-  ```lua
-  local dictionary1 = { hello = "roblox", goodbye = "world" }
-  local dictionary2 = { goodbye = "goodbye" }
-
-  local merged = Merge(dictionary1, dictionary2) -- { hello = "roblox", goodbye = "goodbye" }
-  ```
-]=]
 local function merge<T>(...: any): T
 	local result = {}
 

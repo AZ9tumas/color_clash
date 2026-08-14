@@ -1,7 +1,3 @@
---!native
---!optimize 2
---!strict
-
 local FreeThreads: {thread} = table.create(500)
 local function RunFunction<Arguments...>(callback: (Arguments...) -> (), thread: thread, ...: Arguments...)
 	callback(...)
@@ -26,7 +22,6 @@ local function FastDefer<Arguments...>(callback: (Arguments...) -> (), ...: Argu
 		coroutine.resume(thread)
 	end
 
-	-- TODO: This might be able to throw?
 	return task.defer(thread, callback, thread, ...)
 end
 

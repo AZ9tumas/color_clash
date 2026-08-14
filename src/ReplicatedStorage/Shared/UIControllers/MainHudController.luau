@@ -32,9 +32,6 @@ function MainHudController.SetWeaponInfo(weaponName, ammoStr)
 	AmmoText.Text = ammoStr or "N/A"
 end
 
--- Every slot button ships with the same pistol image. Rather than sourcing an icon per
--- weapon, render the real Tool model in a ViewportFrame: always matches the weapon, and
--- any weapon added to Shared.Assets.Weapons later is covered with no extra work.
 local weaponsFolder = nil
 
 local function weaponTemplate(name)
@@ -67,7 +64,6 @@ local function renderWeaponIcon(btn, weaponName)
 		return
 	end
 
-	-- Rebuilding the model every refresh would be wasteful; this runs on every tool change.
 	if viewport and viewport:GetAttribute("Weapon") == weaponName then
 		viewport.Visible = true
 		return
@@ -85,7 +81,7 @@ local function renderWeaponIcon(btn, weaponName)
 	for _, child in viewport:GetChildren() do child:Destroy() end
 
 	local model = template:Clone()
-	-- Strip anything that could fire inside the viewport.
+
 	for _, d in model:GetDescendants() do
 		if d:IsA("Sound") or d:IsA("RemoteEvent") or d:IsA("BaseScript") or d:IsA("Animation") then
 			d:Destroy()
@@ -105,22 +101,18 @@ local function renderWeaponIcon(btn, weaponName)
 	local cam = Instance.new("Camera")
 	cam.Parent = viewport
 	viewport.CurrentCamera = cam
-	-- Three-quarter view, pulled back far enough to frame the whole weapon.
+
 	cam.CFrame = CFrame.lookAt(center + Vector3.new(1, 0.45, 1).Unit * (radius * 2.6), center)
 
 	viewport:SetAttribute("Weapon", weaponName)
 	viewport.Visible = true
 
-	-- Hide the stock pistol image now that something better is drawn on top of it.
 	btn.Image = ""
 end
 
 local function refreshWeaponIcons()
 	local mainName, meleeName
 
-	-- Built conditionally rather than as a literal: during a respawn Character is nil, and
-	-- generalized iteration over {nil, backpack} stops at the first nil, which would skip
-	-- the Backpack entirely and blank both icons.
 	local containers = {}
 	if player.Character then table.insert(containers, player.Character) end
 	local backpack = player:FindFirstChild("Backpack")
@@ -161,10 +153,10 @@ local function updateVisibility()
 			end
 		end
 	end
-	
+
 	local isPlaying = player:GetAttribute("IsPlaying") == true
 	local shouldShowWeapons = isPlaying and hasTools
-	
+
 	if shouldShowWeapons ~= currentWeaponsVisible then
 		currentWeaponsVisible = shouldShowWeapons
 		if shouldShowWeapons then
@@ -173,7 +165,7 @@ local function updateVisibility()
 			UIAnimations.PopOut(WeaponsFrame)
 		end
 	end
-	
+
 	HealthBarFrame.Visible = isPlaying
 	refreshWeaponIcons()
 end
@@ -192,7 +184,7 @@ local function equipWeapon(slot)
 
 	local targetTool = nil
 	local backpack = player:FindFirstChild("Backpack")
-	
+
 	if backpack then
 		for _, tool in ipairs(backpack:GetChildren()) do
 			if tool:IsA("Tool") then
@@ -203,7 +195,7 @@ local function equipWeapon(slot)
 			end
 		end
 	end
-	
+
 	if not targetTool then
 		for _, tool in ipairs(char:GetChildren()) do
 			if tool:IsA("Tool") then
@@ -224,14 +216,14 @@ function MainHudController.Init()
 	pcall(function()
 		game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 	end)
-	
+
 	task.spawn(function()
 		local StarterGui = game:GetService("StarterGui")
 		local resetBindable = Instance.new("BindableEvent")
 		resetBindable.Event:Connect(function()
 			RoundRemotes.GetResetEvent():FireServer()
 		end)
-		
+
 		local success = false
 		while not success do
 			success = pcall(function()
@@ -257,7 +249,7 @@ function MainHudController.Init()
 	end)
 
 	player:GetAttributeChangedSignal("IsPlaying"):Connect(updateVisibility)
-	
+
 	local function onCharacterAdded(char)
 		char.ChildAdded:Connect(updateVisibility)
 		char.ChildRemoved:Connect(updateVisibility)
@@ -266,9 +258,9 @@ function MainHudController.Init()
 		if humanoid then
 			humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
 			humanoid.BreakJointsOnDeath = false
-			
-			humanoid.HealthChanged:Connect(function(h) 
-				updateHealth(h, humanoid.MaxHealth) 
+
+			humanoid.HealthChanged:Connect(function(h)
+				updateHealth(h, humanoid.MaxHealth)
 				if h <= 0 then
 					task.delay(0.1, function()
 						local PlayerScripts = player:FindFirstChild("PlayerScripts")
@@ -286,18 +278,18 @@ function MainHudController.Init()
 			end)
 			updateHealth(humanoid.Health, humanoid.MaxHealth)
 		end
-		
+
 		local backpack = player:WaitForChild("Backpack", 5)
 		if backpack then
 			backpack.ChildAdded:Connect(updateVisibility)
 			backpack.ChildRemoved:Connect(updateVisibility)
 		end
-		
+
 		updateVisibility()
 	end
 
 	player.CharacterAdded:Connect(onCharacterAdded)
-	
+
 	if player.Character then
 		task.spawn(onCharacterAdded, player.Character)
 	end

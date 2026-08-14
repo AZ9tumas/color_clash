@@ -10,8 +10,7 @@ local RewardConfig = {
 		[8] = 100,
 		Default = 50
 	},
-	-- Flat, not a range: the kill feed states the payout outright, so it has to be the
-	-- same number every time.
+
 	Kill = {
 		Amount = 25
 	}

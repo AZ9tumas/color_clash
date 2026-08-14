@@ -18,9 +18,6 @@ function Spring.new(targetValue, options)
 end
 
 function Spring:step(state, dt)
-	-- Copyright 2018 Parker Stebbins (parker@fractality.io)
-	-- github.com/Fraktality/Spring
-	-- Distributed under the MIT license
 
 	local d = self._dampingRatio
 	local f = self._frequency*2*math.pi
@@ -33,26 +30,14 @@ function Spring:step(state, dt)
 
 	local p1, v1
 
-	if d == 1 then -- Critically damped
+	if d == 1 then
 		p1 = (offset*(1 + f*dt) + v0*dt)*decay + g
 		v1 = (v0*(1 - f*dt) - offset*(f*f*dt))*decay
-	elseif d < 1 then -- Underdamped
+	elseif d < 1 then
 		local c = math.sqrt(1 - d*d)
 
 		local i = math.cos(f*c*dt)
 		local j = math.sin(f*c*dt)
-
-		-- Damping ratios approaching 1 can cause division by small numbers.
-		-- To fix that, group terms around z=j/c and find an approximation for z.
-		-- Start with the definition of z:
-		--    z = sin(dt*f*c)/c
-		-- Substitute a=dt*f:
-		--    z = sin(a*c)/c
-		-- Take the Maclaurin expansion of z with respect to c:
-		--    z = a - (a^3*c^2)/6 + (a^5*c^4)/120 + O(c^6)
-		--    z ≈ a - (a^3*c^2)/6 + (a^5*c^4)/120
-		-- Rewrite in Horner form:
-		--    z ≈ a + ((a*a)*(c*c)*(c*c)/20 - c*c)*(a*a*a)/6
 
 		local z
 		if c > EPS then
@@ -61,13 +46,6 @@ function Spring:step(state, dt)
 			local a = dt*f
 			z = a + ((a*a)*(c*c)*(c*c)/20 - c*c)*(a*a*a)/6
 		end
-
-		-- Frequencies approaching 0 present a similar problem.
-		-- We want an approximation for y as f approaches 0, where:
-		--    y = sin(dt*f*c)/(f*c)
-		-- Substitute b=dt*c:
-		--    y = sin(b*c)/b
-		-- Now reapply the process from z.
 
 		local y
 		if f*c > EPS then
@@ -80,7 +58,7 @@ function Spring:step(state, dt)
 		p1 = (offset*(i + d*z) + v0*y)*decay + g
 		v1 = (v0*(i - z*d) - offset*(z*f))*decay
 
-	else -- Overdamped
+	else
 		local c = math.sqrt(d*d - 1)
 
 		local r1 = -f*(d - c)
@@ -97,7 +75,7 @@ function Spring:step(state, dt)
 	end
 
 	local complete = math.abs(v1) < VELOCITY_THRESHOLD and math.abs(p1 - g) < POSITION_THRESHOLD
-	
+
 	return {
 		complete = complete,
 		value = complete and g or p1,

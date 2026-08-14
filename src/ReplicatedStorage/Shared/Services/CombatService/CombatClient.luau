@@ -4,13 +4,11 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
-local HapticService = game:GetService("HapticService")
 
 local Shared = ReplicatedStorage.Shared
 local Items = require(Shared.Modules.Core.Items)
 local CombatRemotes = require(Shared.Remotes.CombatRemotes)
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
-local WeaponClient = require(Shared.Classes.WeaponClient)
 local CrosshairController = require(Shared.UIControllers.CrosshairController)
 local SettingsController = require(Shared.UIControllers.SettingsController)
 local FXUtil = require(Shared.Modules.Utils.FXUtil)
@@ -21,50 +19,8 @@ local CombatClient = {}
 local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
-local activeWeapons = setmetatable({}, {__mode = "k"})
-local equippedWeapon = nil
-
 local currentSwayX, currentSwayY = 0, 0
 
--- Camera recoil moved to CameraFX (spring-based); this callback only drives haptics now.
-local function addRecoil(amount)
-	if SettingsController.GetValue("Controller Vibration") then
-		pcall(function()
-			if HapticService:IsMotorSupported(Enum.UserInputType.Gamepad1, Enum.VibrationMotor.Small) then
-				HapticService:SetMotor(Enum.UserInputType.Gamepad1, Enum.VibrationMotor.Small, math.min(1, amount * 15))
-				task.delay(0.15, function()
-					HapticService:SetMotor(Enum.UserInputType.Gamepad1, Enum.VibrationMotor.Small, 0)
-				end)
-			end
-		end)
-	end
-end
-
-local function setupTool(tool)
-	if not tool:IsA("Tool") then return end
-	if activeWeapons[tool] then return end
-
-	-- Guns are owned by GunService's GunHandler architecture now; WeaponClient only
-	-- handles melee.
-	local data = Items[tool.Name]
-	if data and data.MaxAmmo then return end
-
-	-- Isolated per tool: in the reference gunsystem one bad gun took the whole weapon
-	-- layer down with it. Here it logs, is skipped, and every other gun keeps working.
-	local ok, result = pcall(WeaponClient.new, tool, addRecoil)
-	if not ok then
-		warn(string.format("[Combat] weapon setup failed for %q: %s", tool.Name, tostring(result)))
-		return
-	end
-
-	activeWeapons[tool] = result
-	tool.Equipped:Connect(function() equippedWeapon = result end)
-	tool.Unequipped:Connect(function() if equippedWeapon == result then equippedWeapon = nil end end)
-end
-
--- Kill vignette, Valorant-Reyna style: red gradient edges snap in and drain out slowly,
--- with a saturation/contrast pulse through a ColorCorrectionEffect so the whole frame
--- pops for a beat. Procedural - four gradient frames, no image assets to fail.
 local killVignetteFrames = nil
 local killColorCorrection = nil
 
@@ -78,7 +34,6 @@ local function buildKillVignette(playerGui)
 
 	killVignetteFrames = {}
 
-	-- Edge, thickness fraction, gradient rotation (transparent side faces screen centre)
 	local edges = {
 		{ position = UDim2.fromScale(0, 0), size = UDim2.fromScale(1, 0.22), rotation = 90 },
 		{ position = UDim2.fromScale(0, 0.78), size = UDim2.fromScale(1, 0.22), rotation = -90 },
@@ -121,7 +76,6 @@ local function showKillFlash()
 		killColorCorrection.Parent = game:GetService("Lighting")
 	end
 
-	-- Snap in, drain out.
 	for _, frame in killVignetteFrames do
 		frame.BackgroundTransparency = 0.25
 		TweenService:Create(frame, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -154,6 +108,14 @@ function CombatClient.Init()
 				FXUtil.PlaySoundAt(isHeadshot and "Headshot" or "Land", game:GetService("SoundService"), isHeadshot and 1 or 0.4)
 			end
 
+			local heldTool = player.Character and player.Character:FindFirstChildOfClass("Tool")
+			local heldData = heldTool and Items[heldTool.Name]
+			if heldData and not heldData.MaxAmmo then
+				local intensity = heldData.Shake and heldData.Shake.Intensity or 0.4
+				CameraFX.Shake(Vector3.new(2.2, 0, 1.8) * (0.6 + intensity), 0.22, 0.7)
+				CameraFX.FirePulse(4 + intensity * 3)
+			end
+
 			local hitCharacter = hitPart:FindFirstAncestorWhichIsA("Model")
 			if hitCharacter and hitCharacter:FindFirstChildOfClass("Humanoid")
 				and SettingsController.GetValue("Blood Effects") then
@@ -167,7 +129,7 @@ function CombatClient.Init()
 
 		local debrisFolder = Workspace:FindFirstChild("WallDebrisFolder") or Instance.new("Folder", Workspace)
 		debrisFolder.Name = "WallDebrisFolder"
-		
+
 		local numberPart = Instance.new("Part")
 		numberPart.Name = "DamageNumberPart"
 		numberPart.Size = Vector3.new(0.01, 0.01, 0.01)
@@ -176,13 +138,13 @@ function CombatClient.Init()
 		numberPart.CanCollide = false
 		numberPart.Transparency = 1
 		numberPart.Parent = debrisFolder
-		
+
 		local billboard = Instance.new("BillboardGui")
 		billboard.Size = UDim2.fromScale(1.3, 1.3)
 		billboard.StudsOffset = Vector3.new(math.random(-15, 15)/10, math.random(5, 15)/10, math.random(-15, 15)/10)
 		billboard.AlwaysOnTop = true
 		billboard.Parent = numberPart
-		
+
 		local textLabel = Instance.new("TextLabel")
 		textLabel.Size = UDim2.fromScale(1, 1)
 		textLabel.Position = UDim2.fromScale(0.5, 0.5)
@@ -191,8 +153,8 @@ function CombatClient.Init()
 		textLabel.Text = tostring(math.floor(tonumber(damage) or 0))
 		textLabel.Font = Enum.Font.FredokaOne
 		textLabel.TextScaled = true
-		textLabel.Rotation = math.random(-12, 12) 
-		
+		textLabel.Rotation = math.random(-12, 12)
+
 		if isHeadshot then
 			textLabel.TextColor3 = Color3.fromRGB(255, 30, 30)
 			local grad = Instance.new("UIGradient", textLabel)
@@ -204,50 +166,50 @@ function CombatClient.Init()
 		else
 			textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 		end
-		
+
 		local uiStroke = Instance.new("UIStroke")
 		uiStroke.Color = Color3.fromRGB(20, 0, 0)
 		uiStroke.Thickness = isHeadshot and 3.5 or 2.0
 		uiStroke.Parent = textLabel
 		textLabel.Parent = billboard
-		
+
 		local uiScale = Instance.new("UIScale")
 		uiScale.Scale = 0
 		uiScale.Parent = textLabel
-		
+
 		local popTarget = isHeadshot and 1.7 or 1.2
 		TweenService:Create(uiScale, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = popTarget}):Play()
-		
+
 		task.delay(0.2, function()
 			if not uiScale or not uiScale.Parent then return end
-			
+
 			TweenService:Create(billboard, TweenInfo.new(0.55, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
 				StudsOffset = billboard.StudsOffset + Vector3.new(0, 3.5, 0)
 			}):Play()
-			
+
 			TweenService:Create(uiScale, TweenInfo.new(0.55, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
 				Scale = isHeadshot and 0.85 or 0.6
 			}):Play()
-			
+
 			TweenService:Create(textLabel, TweenInfo.new(0.55, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
 				TextTransparency = 1
 			}):Play()
-			
+
 			TweenService:Create(uiStroke, TweenInfo.new(0.55, Enum.EasingStyle.Cubic, Enum.EasingDirection.In), {
 				Transparency = 1
 			}):Play()
 		end)
-		
+
 		game.Debris:AddItem(numberPart, 0.9)
-		
+
 		if SettingsController.GetValue("Blood Effects") then
 			local holeColor = Color3.fromRGB(60, 0, 0)
 			local splatterColor = Color3.fromRGB(170, 0, 0)
-			
+
 			local params = RaycastParams.new()
 			params.FilterType = Enum.RaycastFilterType.Exclude
 			params.FilterDescendantsInstances = {player.Character, debrisFolder}
-			
+
 			if hitPart and hitNormal then
 				local hole = Instance.new("Part")
 				hole.Shape = Enum.PartType.Cylinder
@@ -260,13 +222,13 @@ function CombatClient.Init()
 				hole.CanQuery = false
 				hole.CanTouch = false
 				hole.Massless = true
-				
+
 				local pPos = position + (hitNormal * 0.01)
 				local right = hitNormal
 				local up = (math.abs(right.Y) > 0.99) and Vector3.new(0, 0, 1) or Vector3.new(0, 1, 0)
 				local back = right:Cross(up).Unit
 				up = back:Cross(right).Unit
-				
+
 				hole.CFrame = CFrame.fromMatrix(pPos, right, up, back)
 				hole.Parent = debrisFolder
 
@@ -274,7 +236,7 @@ function CombatClient.Init()
 				weld.Part0 = hitPart
 				weld.Part1 = hole
 				weld.Parent = hole
-				
+
 				task.delay(1.5, function()
 					if hole and hole.Parent then
 						local tw = TweenService:Create(hole, TweenInfo.new(0.5), {Transparency = 1})
@@ -286,7 +248,7 @@ function CombatClient.Init()
 
 			local damageVal = tonumber(damage) or 15
 			local numDrops = math.clamp(math.floor(damageVal / 5), 3, 6)
-			
+
 			for i = 1, numDrops do
 				local chunk = Instance.new("Part")
 				chunk.Size = Vector3.new(0.25, 0.25, 0.25)
@@ -298,33 +260,33 @@ function CombatClient.Init()
 				chunk.CanTouch = false
 				chunk.CFrame = CFrame.new(position)
 				chunk.Parent = debrisFolder
-				
+
 				local pushNormal = hitNormal or Vector3.new(0, 1, 0)
 				local splatVelocity = (pushNormal * math.random(15, 25)) + Vector3.new(
 					math.random(-10, 10),
 					math.random(5, 15),
 					math.random(-10, 10)
 				)
-				
+
 				task.spawn(function()
 					local pCur = position
 					local alive = true
 					local st = 0
 					local sGravity = Vector3.new(0, -60, 0)
-					
+
 					while alive and st < 1.5 do
 						local dt = RunService.RenderStepped:Wait()
 						st += dt
-						
+
 						local nextPos = pCur + (splatVelocity * dt)
 						splatVelocity = splatVelocity + (sGravity * dt)
-						
+
 						local result = Workspace:Raycast(pCur, nextPos - pCur, params)
-						
+
 						if result then
 							alive = false
 							chunk:Destroy()
-							
+
 							local puddle = Instance.new("Part")
 							puddle.Shape = Enum.PartType.Cylinder
 							local radius = math.random(5, 12) / 10
@@ -335,17 +297,17 @@ function CombatClient.Init()
 							puddle.CanCollide = false
 							puddle.CanQuery = false
 							puddle.CanTouch = false
-							
+
 							local ppPos = result.Position + result.Normal * 0.01
-							
+
 							local rightVec = result.Normal
 							local upVec = (math.abs(rightVec.Y) > 0.99) and Vector3.new(0, 0, 1) or Vector3.new(0, 1, 0)
 							local backVec = rightVec:Cross(upVec).Unit
 							upVec = backVec:Cross(rightVec).Unit
-							
+
 							puddle.CFrame = CFrame.fromMatrix(ppPos, rightVec, upVec, backVec)
 							puddle.Parent = debrisFolder
-							
+
 							task.delay(math.random(3, 5), function()
 								if puddle and puddle.Parent then
 									local tw = TweenService:Create(puddle, TweenInfo.new(1.5), {Transparency = 1})
@@ -358,7 +320,7 @@ function CombatClient.Init()
 							chunk.CFrame = CFrame.new(pCur)
 						end
 					end
-					
+
 					if alive then chunk:Destroy() end
 				end)
 			end
@@ -368,8 +330,7 @@ function CombatClient.Init()
 	RoundRemotes.GetKillFeedEvent().OnClientEvent:Connect(function(entry)
 		if type(entry) == "table" and entry.Killer == player.Name then
 			CrosshairController.ShowHitMarker(3)
-			-- The "Kill Sound Effect" toggle has existed in Settings since day one but was
-			-- never wired to anything; this is its implementation.
+
 			if SettingsController.GetValue("Kill Sound Effect") then
 				FXUtil.PlaySoundAt("KillStinger", game:GetService("SoundService"))
 			end
@@ -391,11 +352,11 @@ function CombatClient.Init()
 		tracer.Transparency = 0.2
 		tracer.Size = Vector3.new(0.1, 0.1, distance)
 		tracer.CFrame = CFrame.lookAt(origin, targetPos) * CFrame.new(0, 0, -distance / 2)
-		
+
 		local debrisFolder = Workspace:FindFirstChild("WallDebrisFolder") or Instance.new("Folder", Workspace)
 		debrisFolder.Name = "WallDebrisFolder"
 		tracer.Parent = debrisFolder
-		
+
 		local tween = TweenService:Create(tracer, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 			Transparency = 1, Size = Vector3.new(0, 0, distance)
 		})
@@ -420,23 +381,23 @@ function CombatClient.Init()
 		if isFirstPerson and isAlive then
 			local targetSwayX = 0
 			local targetSwayY = 0
-			
+
 			if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
 				local md = UserInputService:GetMouseDelta()
 				targetSwayX = math.clamp(-md.X * 0.035, -2, 2)
 				targetSwayY = math.clamp(-md.Y * 0.035, -2, 2)
 			end
-			
+
 			currentSwayX = currentSwayX + (targetSwayX - currentSwayX) * math.min(1, dt * 8)
 			currentSwayY = currentSwayY + (targetSwayY - currentSwayY) * math.min(1, dt * 8)
 
 			local walkSpeedRatio = root.AssemblyLinearVelocity.Magnitude / 22
 			local bobVal = math.sin(tick() * 12) * math.clamp(walkSpeedRatio * 0.015, 0, 0.06)
-			
-			camera.CFrame = camera.CFrame 
+
+			camera.CFrame = camera.CFrame
 				* CFrame.Angles(math.rad(currentSwayY), math.rad(currentSwayX), 0)
 				* CFrame.new(0, bobVal, 0)
-			
+
 			for _, p in char:GetDescendants() do
 				if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
 					local pName = p.Name
@@ -450,10 +411,7 @@ function CombatClient.Init()
 		else
 			currentSwayX = 0
 			currentSwayY = 0
-			-- FirstPersonRig owns local body transparency while a gun is out (it hides the
-			-- head you would otherwise be looking through). This loop runs on RenderStepped,
-			-- after the rig's render-step bind, so restoring everything here would undo the
-			-- rig's work every frame.
+
 			if char and not player:GetAttribute("GunCameraActive") then
 				for _, p in char:GetDescendants() do
 					if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
@@ -463,18 +421,18 @@ function CombatClient.Init()
 			end
 		end
 
+		local heldTool = char and char:FindFirstChildOfClass("Tool")
+		local heldWeaponData = heldTool and Items[heldTool.Name]
+
 		local shouldForceManualRot = false
 		if player:GetAttribute("InMenu") == false then
-			shouldForceManualRot = (equippedWeapon ~= nil) or isFirstPerson
+			shouldForceManualRot = (heldWeaponData ~= nil) or isFirstPerson
 		end
 
 		local moveState = player:GetAttribute("MovementState")
 
 		if player:GetAttribute("GunCameraActive") then
-			-- FirstPersonRig owns the mouse lock, AutoRotate and root yaw while a gun is
-			-- out. This loop is RenderStepped, which fires after every BindToRenderStep
-			-- callback, so writing MouseBehavior here overwrites the rig's LockCenter every
-			-- single frame - and an unlocked mouse reports no delta, which is aiming dead.
+
 		elseif shouldForceManualRot then
 			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 
@@ -488,7 +446,7 @@ function CombatClient.Init()
 
 				if targetLook.Magnitude > 0.001 and not isCustomMoving then
 					local targetRot = CFrame.lookAt(Vector3.zero, targetLook)
-					
+
 					if isFirstPerson then
 						root.CFrame = CFrame.new(root.Position) * targetRot
 					else
@@ -502,13 +460,13 @@ function CombatClient.Init()
 			if not isFirstPerson and UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
 				UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 			end
-			
+
 			if humanoid then
 				local isCustomMoving = false
 				if moveState then
 					isCustomMoving = string.find(moveState, "WallRun") or moveState == "Slide"
 				end
-				
+
 				if not isCustomMoving then
 					humanoid.AutoRotate = true
 				end
@@ -524,32 +482,15 @@ function CombatClient.Init()
 					else
 						targetCamOffset = Vector3.zero
 					end
-				elseif equippedWeapon then
+				elseif heldWeaponData then
 					targetCamOffset = Vector3.new(1.75, 0, 0)
 				end
 			end
-			
+
 			humanoid.CameraOffset = humanoid.CameraOffset:Lerp(targetCamOffset, math.min(1, dt * 15))
 		end
 	end)
 
-	UserInputService.InputBegan:Connect(function(input, processed)
-		if processed then return end
-		if input.KeyCode == Enum.KeyCode.R and equippedWeapon then
-			equippedWeapon:Reload()
-		end
-	end)
-
-	local function onCharacterAdded(character)
-		character.ChildAdded:Connect(setupTool)
-		for _, child in character:GetChildren() do setupTool(child) end
-	end
-
-	if player.Character then onCharacterAdded(player.Character) end
-	player.CharacterAdded:Connect(onCharacterAdded)
-
-	player.Backpack.ChildAdded:Connect(setupTool)
-	for _, child in player.Backpack:GetChildren() do setupTool(child) end
 end
 
 return CombatClient

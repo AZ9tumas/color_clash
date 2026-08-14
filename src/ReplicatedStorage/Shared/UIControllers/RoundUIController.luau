@@ -13,7 +13,6 @@ local FXUtil = require(Shared.Modules.Utils.FXUtil)
 
 local SoundService = game:GetService("SoundService")
 
--- Announcer layer: every HUD message transition gets a cue, played globally.
 local function announce(soundName)
 	FXUtil.PlaySoundAt(soundName, SoundService)
 end
@@ -60,7 +59,6 @@ local function fillSide(sideFrame, slotNames, entries)
 	end
 end
 
--- Tints each side's existing UIStroke so it reads as that team's half of the board.
 local function paintSide(sideFrame, color)
 	local stroke = sideFrame:FindFirstChildOfClass("UIStroke")
 	if stroke then
@@ -92,7 +90,7 @@ local function UpdateTopBar()
 
 	local mode = RoundConfig.GetActiveMode()
 	if mode and mode.TeamBased then
-		-- One team per side, each ranked within itself.
+
 		local perTeam = {}
 		for _, name in RoundConfig.TeamNames do perTeam[name] = {} end
 		for _, entry in entities do
@@ -110,7 +108,7 @@ local function UpdateTopBar()
 		paintSide(TopLeft, leftTeam and RoundConfig.TeamColors[leftTeam])
 		paintSide(TopRight, rightTeam and RoundConfig.TeamColors[rightTeam])
 	else
-		-- FFA keeps the original behaviour: one ranked list flowing across both sides.
+
 		local left, right = {}, {}
 		for i, entry in entities do
 			if i <= #LEFT_SLOTS then
@@ -125,7 +123,6 @@ local function UpdateTopBar()
 		paintSide(TopLeft, nil)
 		paintSide(TopRight, nil)
 
-		-- Ranks must keep counting across the divide, so relabel the right-hand side.
 		for i, slotName in ipairs(RIGHT_SLOTS) do
 			local slotFrame = TopRight:FindFirstChild(slotName)
 			local btn = slotFrame and slotFrame:FindFirstChild("btn")
@@ -142,51 +139,51 @@ local function playVotingAnimation()
 		if originalButtonPositions[frame] then
 			frame.Position = UDim2.new(originalButtonPositions[frame].X.Scale, originalButtonPositions[frame].X.Offset, 1.5, 0)
 		end
-		
+
 		local btn = frame:FindFirstChild("Button")
 		local title = btn and btn:FindFirstChild("Title")
 		local titleFrame = title and title:FindFirstChild("Frame")
-		
+
 		if title and titleFrame then
 			titleFrame.Size = UDim2.new(0.094, 0, 0.055, 0)
 			titleFrame.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
 			title.TextColor3 = Color3.fromRGB(200, 200, 200)
 		end
 	end
-	
+
 	UIAnimations.PopIn(ButtonsHolder)
-	
+
 	task.spawn(function()
-		task.wait(0.2) 
-		
+		task.wait(0.2)
+
 		for _, frame in ipairs(activeFrames) do
 			if not originalButtonPositions[frame] then continue end
-			
+
 			local btn = frame:FindFirstChild("Button")
 			local title = btn and btn:FindFirstChild("Title")
 			local titleFrame = title and title:FindFirstChild("Frame")
-			
+
 			TweenService:Create(frame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 				Position = originalButtonPositions[frame]
 			}):Play()
-			
+
 			if title and titleFrame then
 				task.delay(0.15, function()
 					TweenService:Create(titleFrame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 						Size = UDim2.new(1, 0, 0.055, 0),
 						BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 					}):Play()
-					
+
 					TweenService:Create(title, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 						TextColor3 = Color3.fromRGB(255, 255, 255)
 					}):Play()
 				end)
 			end
-			
-			task.wait(0.3) 
+
+			task.wait(0.3)
 		end
 	end)
-	
+
 	task.delay(0.4, function() if currentState == RoundConfig.States.Voting then UIAnimations.PopInFromTop(Message) end end)
 end
 
@@ -203,7 +200,7 @@ local function syncUIVisibility()
 		elseif currentState == RoundConfig.States.PostRound then
 			UIAnimations.PopInFromTop(Message)
 		end
-		
+
 		if currentState == RoundConfig.States.InGame and player:GetAttribute("IsPlaying") == true then
 			TopFrame.Visible = true
 		end
@@ -223,7 +220,7 @@ function RoundUIController.Init()
 			local modeName = modeNames[i]
 			if modeName then
 				frame.Name = modeName
-				
+
 				local wrapper = Instance.new("Frame")
 				wrapper.Name = modeName .. "_Wrapper"
 				wrapper.Size = frame.Size
@@ -231,28 +228,28 @@ function RoundUIController.Init()
 				wrapper.ClipsDescendants = true
 				wrapper.LayoutOrder = frame.LayoutOrder
 				wrapper.Parent = MainFrames
-				
+
 				frame.Parent = wrapper
 				frame.Size = UDim2.fromScale(1, 1)
-				
+
 				originalButtonPositions[frame] = UDim2.fromScale(0, 0)
-				frame.Position = UDim2.new(0, 0, 1.5, 0) 
-				
+				frame.Position = UDim2.new(0, 0, 1.5, 0)
+
 				table.insert(activeFrames, frame)
-				
+
 				local btn = frame:WaitForChild("Button")
 				btn.ZIndex = 1
-				
+
 				local title = btn:WaitForChild("Title")
 				title.Text = modeName
-				
+
 				local titleFrame = title:WaitForChild("Frame")
 				titleFrame.AnchorPoint = Vector2.new(0.5, 1)
 				titleFrame.Size = UDim2.new(0.094, 0, 0.055, 0)
 				titleFrame.Position = UDim2.new(0.5, 0, 1, 0)
 				titleFrame.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
 				title.TextColor3 = Color3.fromRGB(200, 200, 200)
-				
+
 				local holder = btn:FindFirstChild("Holder")
 				if holder then
 					holder.ZIndex = 10
@@ -260,7 +257,7 @@ function RoundUIController.Init()
 					local template = holder:FindFirstChild("Template")
 					if template then template.Visible = false end
 				end
-				
+
 				UIAnimations.BindButtonAnimations(btn)
 
 				btn.MouseButton1Click:Connect(function()
@@ -309,8 +306,7 @@ function RoundUIController.Init()
 			end
 
 		elseif newState == RoundConfig.States.InGame then
-			-- Voting or team select can now roll straight into the round, so both must
-			-- clear their UI here; there is no intermission in between anymore.
+
 			if oldState == RoundConfig.States.Voting or oldState == RoundConfig.States.TeamSelect or oldState == RoundConfig.States.PostRound then
 				UIAnimations.PopOutToTop(Message)
 				if oldState == RoundConfig.States.Voting then UIAnimations.PopOut(ButtonsHolder) end
@@ -324,7 +320,7 @@ function RoundUIController.Init()
 				if oldState == RoundConfig.States.Voting then UIAnimations.PopOut(ButtonsHolder) end
 			end
 		end
-		
+
 		TopFrame.Visible = (newState == RoundConfig.States.InGame and player:GetAttribute("IsPlaying") == true)
 	end)
 
@@ -340,7 +336,7 @@ function RoundUIController.Init()
 				end
 			end
 		end
-		
+
 		for userIdStr, modeName in pairs(votes) do
 			local targetFrame = nil
 			for _, frame in ipairs(activeFrames) do
@@ -349,12 +345,12 @@ function RoundUIController.Init()
 					break
 				end
 			end
-			
+
 			if targetFrame then
 				local btn = targetFrame:FindFirstChild("Button")
 				local holder = btn and btn:FindFirstChild("Holder")
 				local template = holder and holder:FindFirstChild("Template")
-				
+
 				if holder and template then
 					local clone = template:Clone()
 					clone.Name = tostring(userIdStr)
@@ -369,7 +365,7 @@ function RoundUIController.Init()
 
 	RoundRemotes.GetColorEvent().OnClientEvent:Connect(function(color, duration)
 		if player:GetAttribute("InMenu") ~= false then return end
-		
+
 		if currentColorThread then
 			task.cancel(currentColorThread)
 			currentColorThread = nil
@@ -383,8 +379,7 @@ function RoundUIController.Init()
 			currentColorThread = task.spawn(function()
 				for i = duration, 1, -1 do
 					Message.Text = "Next color in: " .. i .. "s"
-					-- Only the last three seconds tick, so the cue means "get ready"
-					-- rather than becoming a metronome for the whole window.
+
 					if i <= 3 then announce("CountTick") end
 					task.wait(1)
 				end
@@ -415,8 +410,7 @@ function RoundUIController.Init()
 				task.wait(1)
 			end
 			Message.Text = "STAND ON " .. string.upper(color) .. "! (0s)"
-			-- The server hides the wrong platforms right as this countdown expires, so
-			-- the vanish sweep is timed here rather than needing its own remote.
+
 			announce("Vanish")
 			task.wait(2.2)
 			if string.match(Message.Text, "STAND ON") then
@@ -426,7 +420,7 @@ function RoundUIController.Init()
 	end)
 
 	player:GetAttributeChangedSignal("InMenu"):Connect(syncUIVisibility)
-	
+
 	player:GetAttributeChangedSignal("IsPlaying"):Connect(function()
 		TopFrame.Visible = (currentState == RoundConfig.States.InGame and player:GetAttribute("IsPlaying") == true)
 	end)

@@ -1,22 +1,5 @@
---!strict
 local Reduce = require(script.Parent.reduce)
 
---[=[
-	@function zip
-	@within Array
-
-	@param ... {any} -- The arrays to zip together.
-	@return {any} -- The zipped array.
-
-	Zips multiple arrays together into a single array.
-
-	```lua
-	local table1 = { 1, 2, 3 }
-	local table2 = { "hello", "world", "goodbye" }
-
-	local new = Zip(table1, table2) -- { { 1, "hello" }, { 2, "world" }, { 3, "goodbye" } }
-	```
-]=]
 local function zip<T>(...: { any }): T
 	local argCount = select("#", ...)
 	local arguments = { ... }

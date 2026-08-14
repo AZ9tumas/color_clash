@@ -11,9 +11,6 @@ local TeamsController = {}
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
--- StarterGui.Teams ships with ResetOnSpawn = true, so the ScreenGui is destroyed and
--- recloned on respawn. Bind per instance rather than caching once, otherwise a respawn
--- leaves us holding a destroyed frame and the picker never opens again.
 local bound = {}
 local isOpen = false
 
@@ -51,9 +48,6 @@ end
 local LOCKED_COLOR = Color3.fromRGB(120, 120, 120)
 local OPEN_COLOR = Color3.fromRGB(255, 255, 255)
 
--- Team membership is a replicated attribute, so live counts need no remote. The same
--- balance rule the server enforces is mirrored here purely so a locked side reads as
--- locked: the server drops the request either way, this just stops it looking broken.
 local function refreshLabels()
 	local entry = resolve()
 	if not entry then return end
@@ -111,8 +105,6 @@ function TeamsController.Init()
 		bind(gui)
 	end
 
-	-- Driven purely by round state: the picker belongs to the TeamSelect phase, not to
-	-- pressing Play. A player who joins mid-round simply sees it at the next window.
 	RoundRemotes.GetUpdateEvent().OnClientEvent:Connect(function(newState)
 		local inLobby = player:GetAttribute("InMenu") == false
 		setOpen(newState == RoundConfig.States.TeamSelect and inLobby)

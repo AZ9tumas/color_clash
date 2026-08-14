@@ -8,8 +8,6 @@ local FXConfig = require(ReplicatedStorage.Shared.Modules.Core.FXConfig)
 local UIAnimations = {}
 local originalPositions: {[GuiObject]: UDim2} = {}
 
--- UI audio goes through here so every bound button sounds the same, and so the Master
--- and UI volume sliders in Settings actually govern it.
 local function uiVolumeScale()
 	local master = SettingsController.GetValue("Master Volume")
 	local ui = SettingsController.GetValue("UI Volume")
@@ -26,7 +24,6 @@ function UIAnimations.PlayUISound(name: string?, volumeScale: number?)
 	local template = folder and name and folder:FindFirstChild(name)
 	if not template or not template:IsA("Sound") then return end
 
-	-- Clone per play so rapid clicks overlap instead of restarting each other.
 	local sound = template:Clone()
 	sound.Volume = template.Volume * uiVolumeScale() * (volumeScale or 1)
 	sound.Parent = SoundService

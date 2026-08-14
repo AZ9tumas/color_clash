@@ -1,9 +1,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
--- Poses OTHER players' necks from their replicated AimPitch attribute, so everyone can
--- read where a gunner is aiming. The local player's own pose is handled by their
--- FirstPersonRig; this controller deliberately skips them.
 local AimPoseController = {}
 
 local player = Players.LocalPlayer
@@ -35,7 +32,6 @@ function AimPoseController.Init()
 						neck:SetAttribute("PoseOriginalC0", neck.C0)
 					end
 
-					-- Negated to match the measured R6 neck axis (positive X = head down).
 					if math.abs(smoothed) > 0.005 then
 						neck.C0 = neck:GetAttribute("PoseOriginalC0") * CFrame.Angles(-smoothed * NECK_PITCH_SCALE, 0, 0)
 					else

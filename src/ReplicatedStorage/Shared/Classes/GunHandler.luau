@@ -23,11 +23,6 @@ local function log(message, ...)
 	end
 end
 
--- Gun controller in the reference gunsystem's architecture: one object per gun tool
--- owning the full lifecycle (Equip / shoot / stopShoot / ADS / stopADS / Reload), a
--- Heartbeat-driven fire loop, and a rig it feeds recoil impulses to. The server side is
--- deliberately Color Clash's existing pipeline - phase gating, cooldown, spread and
--- damage all stay authoritative in CombatServer/WeaponServer.
 local GunHandler = {}
 local gun = {}
 gun.__index = gun
@@ -56,9 +51,6 @@ function GunHandler.New(tool)
 		isAiming = false,
 		cancelReload = false,
 
-		-- Borrowed, not owned. FirstPersonController runs the camera for the whole round;
-		-- a gun only ever borrows it for ADS and recoil, and must never enable or disable it
-		-- or an unequip would drop the player out of first person mid-match.
 		rig = FirstPersonRig.GetShared(),
 		viewmodel = nil,
 		continuousFireConn = nil,
@@ -74,7 +66,7 @@ end
 
 local function loadTrack(humanoid, animId, priority)
 	local anim = Instance.new("Animation")
-	anim.AnimationId = "rbxassetid://" .. tostring(animId)
+	anim.AnimationId = animId
 	local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
 	local track = animator:LoadAnimation(anim)
 	track.Priority = priority
@@ -120,9 +112,6 @@ function gun:_fireOnce()
 	local recoil = self.Properties.Recoil or { Pitch = 1.5, Yaw = 0.5 }
 	local steady = self.isAiming and 0.5 or 1
 
-	-- COD recoil split: ~40% of the kick is written into the rig's aim state and STAYS
-	-- until the player pulls back down; the rest is spring/shake/FOV that recovers on
-	-- its own. Yaw drifts randomly so sustained fire wanders, not just climbs.
 	self.rig:ApplyAimKick(
 		recoil.Pitch * 0.4 * steady,
 		recoil.Yaw * 0.4 * steady * (math.random() * 2 - 1)
@@ -133,9 +122,7 @@ function gun:_fireOnce()
 		0
 	))
 	if self.viewmodel then
-		-- Same event, one more surface. The reference drives the viewmodel far harder than
-		-- the camera - its own numbers are roughly 10x the camera impulse - because the gun
-		-- is what the eye is actually tracking.
+
 		self.viewmodel:applyRecoilImpulse(Vector3.new(
 			recoil.Pitch * 10 * steady,
 			recoil.Yaw * 8 * steady * (math.random() * 2 - 1),
@@ -150,14 +137,6 @@ function gun:_fireOnce()
 	CameraFX.Shake(Vector3.new(recoil.Pitch * 0.3, 0, recoil.Pitch * 0.25), 0.18, 0.75)
 	CameraFX.FirePulse((self.Properties.Shake and self.Properties.Shake.Intensity or 1) * 2.5)
 
-	-- Instant local fire dressing: muzzle flash scaled by the gun's punch, plus an
-	-- ejected shell. The server tracer arrives a beat later; this beat is the
-	-- difference between crisp and mushy.
-	--
-	-- Preference matters here. The real tool is welded to a character that is fully
-	-- transparent and sitting behind the camera, so a flash at its muzzle lights empty air
-	-- while the gun on screen stays dark. The viewmodel's own muzzle is the one the player
-	-- is looking down, so it wins whenever the weapon has the part for it.
 	local intensity = self.Properties.Shake and self.Properties.Shake.Intensity or 1
 	local muzzlePos = (self.viewmodel and self.viewmodel:GetMuzzlePosition())
 		or FXUtil.GetMuzzlePosition(self.tool)
@@ -231,7 +210,7 @@ function gun:ADS()
 	if self.viewmodel then self.viewmodel:StartADS() end
 	CameraFX.SetAim(self.Properties.Aim and self.Properties.Aim.FOV or 55)
 	FXUtil.PlaySoundAt("AimIn", SoundService)
-	-- COD standard: aiming slows you down. MovementClient reads this attribute.
+
 	player:SetAttribute("AimSlowMultiplier", 0.55)
 end
 
@@ -258,7 +237,7 @@ function gun:Reload()
 
 		if self.Properties.ReloadPerShell then
 			while self._ammo < self.Properties.MaxAmmo and self.isEquipped and not self.cancelReload do
-				-- Replayed per shell so the animation and the ammo counter tick together.
+
 				if self.viewmodel then self.viewmodel:PlayReload(duration) end
 				task.wait(duration)
 				if not self.isEquipped or self.cancelReload then break end
@@ -290,15 +269,6 @@ function gun:Equip()
 	self.isEquipped = true
 	self.cancelReload = false
 
-	-- Viewmodel first: whether one exists decides whether the rig hides the real body
-	-- outright or only from the neck up, and the rig reads that on its first frame.
-	--
-	-- The reference's arrangement: one shared arm rig, and the weapon cloned into it on
-	-- equip and jointed to the hand. The grip offset is per gun because every model has its
-	-- handle in a different place and pointing a different way.
-	-- Shared and already up: first person owns the viewmodel, this only changes what is in
-	-- the hands. The weapon model comes from the authored rig, not from this Tool, so
-	-- nothing is cloned here.
 	local viewmodelConfig = self.Properties.Viewmodel
 	self.viewmodel = Viewmodel.GetShared(viewmodelConfig)
 
@@ -313,9 +283,6 @@ function gun:Equip()
 	self:updateUI()
 	CrosshairController.SetCrosshairVisible(true)
 
-	-- Hold animations are half the immersion: without them the character death-grips
-	-- the gun in a T-ish pose. They write Motor6D.Transform, so the rig's C0 pitch
-	-- layering composes on top instead of fighting them.
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local anims = self.Properties.Animations
@@ -363,7 +330,6 @@ function gun:Unequip()
 	self:stopShoot()
 	self:stopADS()
 
-	-- The weapon goes; the hands stay. The viewmodel belongs to first person, not to a gun.
 	if self.viewmodel then
 		self.viewmodel:ClearWeapon()
 		self.viewmodel = nil
@@ -386,7 +352,6 @@ end
 
 function gun:Destroy()
 	self:Unequip()
-	self.rig:Destroy()
 end
 
 return GunHandler

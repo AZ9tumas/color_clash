@@ -10,8 +10,6 @@ local TeamVisualsController = {}
 local player = Players.LocalPlayer
 local highlights = {}
 
--- Occluded, not AlwaysOnTop: a highlight visible through walls would be a free wallhack.
--- You can only read someone's team when you actually have line of sight to them.
 local DEPTH_MODE = Enum.HighlightDepthMode.Occluded
 local FILL_TRANSPARENCY = 0.65
 local OUTLINE_TRANSPARENCY = 0
@@ -64,8 +62,7 @@ local function track(target)
 	target:GetAttributeChangedSignal("Team"):Connect(function() refresh(target) end)
 	target:GetAttributeChangedSignal("IsPlaying"):Connect(function() refresh(target) end)
 	target.CharacterAdded:Connect(function()
-		-- Characters are reused rather than respawned here, but a LoadCharacter from the
-		-- ragdoll path still swaps the model out from under the highlight.
+
 		task.defer(refresh, target)
 	end)
 end
@@ -75,14 +72,10 @@ function TeamVisualsController.Init()
 	Players.PlayerAdded:Connect(track)
 	Players.PlayerRemoving:Connect(clear)
 
-	-- Teams are wiped between rounds and the mode can change, so re-evaluate everyone
-	-- whenever the active mode flips.
 	Workspace:GetAttributeChangedSignal("RoundMode"):Connect(function()
 		for _, target in Players:GetPlayers() do refresh(target) end
 	end)
 
-	-- Cheap safety net: attributes can land before a character exists, and characters can
-	-- be swapped without a CharacterAdded we caught.
 	task.spawn(function()
 		while true do
 			task.wait(2)

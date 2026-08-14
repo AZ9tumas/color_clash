@@ -1,5 +1,4 @@
 local barSize = UDim.new(0.02075, 0)
---First number is size in scale (percent) and second number is size in offset (pixels)
 
 local scrollingFrame = script.Parent
 local scrollingFrameParent = script.Parent.Parent

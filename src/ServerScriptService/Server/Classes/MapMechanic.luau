@@ -13,15 +13,6 @@ local rng = Random.new()
 local templateFolder = nil
 local variantNames = {}
 
--- Colour layout.
---
--- The grid is tiled with 2x2 blocks and each full block gets a permutation of all four
--- colours, so every aligned 2x2 block contains exactly one of each. That is the property
--- that keeps the map fair: wherever a player is standing, a cell of the called colour is
--- at most one cell away.
---
--- Blocks that fall off the edge on an odd row or column are partial. Those take the
--- globally scarcest colours instead, which keeps the total per colour within one of even.
 function MapMechanic.BuildLayout(rows, cols, colorOrder, attempts, random)
 	random = random or rng
 	attempts = math.max(1, attempts or 1)
@@ -101,8 +92,6 @@ function MapMechanic.BuildLayout(rows, cols, colorOrder, attempts, random)
 	return grid, counts
 end
 
--- Harvests one pristine copy of every cell variant before anything regenerates, so the
--- authored geometry survives even though Generate() destroys the live cells.
 function MapMechanic.Init()
 	local map = Workspace:FindFirstChild("Map")
 	if not map then
@@ -146,14 +135,11 @@ function MapMechanic.Generate()
 		return false
 	end
 
-	-- Never tear the map down unless we can rebuild it.
 	if #variantNames == 0 then
 		warn("[Map] no templates harvested, skipping regeneration")
 		return false
 	end
 
-	-- Validate the templates BEFORE destroying anything, so a missing or detached folder
-	-- can never leave the arena torn down. Re-harvest from the live map if needed.
 	local usable = {}
 	if templateFolder and templateFolder.Parent then
 		for _, name in variantNames do
@@ -182,8 +168,6 @@ function MapMechanic.Generate()
 		return false
 	end
 
-	-- Drop folders for colours that are no longer configured, then clear the rest so the
-	-- Map -> colour Folder -> cell Model hierarchy is preserved exactly.
 	for _, child in map:GetChildren() do
 		if child:IsA("Folder") and not MapConfig.Colors[child.Name] then child:Destroy() end
 	end
@@ -213,8 +197,6 @@ function MapMechanic.Generate()
 				if d:IsA("BasePart") then d.Color = tint end
 			end
 
-			-- Only slide in X/Z: each variant's authored height above the ground plane
-			-- is part of its design and must be preserved.
 			local targetX = originX + (c - 0.5) * MapConfig.CellPitchX
 			local targetZ = originZ + (r - 0.5) * MapConfig.CellPitchZ
 			local box = clone:GetBoundingBox()

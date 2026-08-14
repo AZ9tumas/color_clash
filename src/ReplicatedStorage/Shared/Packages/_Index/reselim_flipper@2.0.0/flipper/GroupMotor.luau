@@ -55,7 +55,7 @@ function GroupMotor:step(deltaTime)
 	for _, motor in pairs(self._motors) do
 		local complete = motor:step(deltaTime)
 		if not complete then
-			-- If any of the sub-motors are incomplete, the group motor will not be complete either
+
 			allMotorsComplete = false
 		end
 	end

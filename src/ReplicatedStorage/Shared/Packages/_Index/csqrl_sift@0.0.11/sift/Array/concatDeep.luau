@@ -1,30 +1,8 @@
---!strict
 local Sift = script.Parent.Parent
 
 local CopyDeep = require(script.Parent.copyDeep)
 local None = require(Sift.None)
 
---[=[
-	@function concatDeep
-	@within Array
-
-	@param ... ...any -- The arrays to concatenate.
-	@return {T} -- The concatenated array.
-
-	Joins multiple arrays together into a single array, with deep copies of all
-	nested arrays.
-
-	#### Aliases
-
-	`joinDeep`, `mergeDeep`
-
-	```lua
-	local table1 = { 1, 2, { 3, 4 } }
-	local table2 = { 5, 6, { 7, 8 } }
-
-	local new = ConcatDeep(table1, table2) -- { 1, 2, { 3, 4 }, 5, 6, { 7, 8 } }
-	```
-]=]
 local function concatDeep<T>(...: any): { T }
 	local result = {}
 

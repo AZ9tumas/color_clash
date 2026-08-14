@@ -21,10 +21,6 @@ local MainHUD = PlayerGui:WaitForChild("MainHUD")
 local DeathScreen = MainHUD:WaitForChild("DeathScreen")
 local DeathMessage = DeathScreen:WaitForChild("Message")
 
--- Valorant kill feed. Built in code rather than cloned from a Template because the row is
--- not one label - it is killer / weapon / headshot / victim as separate runs of text, each
--- coloured from the viewer's own point of view, and every row has to size itself to
--- whatever names it happens to hold. Sits under the top bar on the right, newest on top.
 local FEED_ANCHOR = UDim2.new(0.99, 0, 0.155, 0)
 local ROW_HEIGHT = 26
 local ROW_PADDING = 4
@@ -47,9 +43,6 @@ local CASH_COLOR = Color3.fromRGB(126, 224, 142)
 local feedContainer = nil
 local rows = {}
 
--- Team colours are the round's own Red/Blue, lifted toward white so they stay legible on
--- the dark row. Off-team modes fall back to "you versus everyone", which is all the
--- relationship there is in a free-for-all.
 local function nameColor(name, team)
 	if name == player.Name then return SELF_COLOR end
 
@@ -96,16 +89,11 @@ local function makeLabel(text, color, size, weight)
 	return label
 end
 
--- Single owner of every row's Position, entry slide included. Re-targeting a row that is
--- still sliding is the whole point: kills land in bursts, and a row that kept animating to
--- the slot it was assigned on spawn would come to rest underneath the one that displaced
--- it.
 local function layoutRows()
 	for index, row in rows do
 		local targetY = (index - 1) * (ROW_HEIGHT + ROW_PADDING)
 		if row.y ~= targetY then
-			-- Never placed yet means it is still off-screen right: snappier curve for the
-			-- arrival, the softer one for rows just shuffling down.
+
 			local info = row.y < 0 and SLIDE_IN or SHIFT
 			row.y = targetY
 			TweenService:Create(row.frame, info, { Position = UDim2.new(1, 0, 0, targetY) }):Play()
@@ -150,8 +138,6 @@ local function addRow(entry)
 	frame.BorderSizePixel = 0
 	frame.ZIndex = 4
 
-	-- Rows you are in sit brighter and team-tinted, the way Valorant lifts your own kills
-	-- out of the stack. Mostly row colour still, or the names stop reading.
 	local rowColor = ROW_BACKGROUND
 	if involved then
 		local myTeam = player:GetAttribute("Team")
@@ -194,8 +180,6 @@ local function addRow(entry)
 
 	add(4, makeLabel(victimName, nameColor(victimName, entry.VictimTeam), 15, Enum.Font.GothamBold))
 
-	-- The payout is the reason kills matter here, so your own rows state it. Only yours -
-	-- what everyone else earned is not your business and would just be noise.
 	if killerName == player.Name and type(entry.Reward) == "number" then
 		add(5, makeLabel("+$" .. FormatUtil.Comma(entry.Reward), CASH_COLOR, 13, Enum.Font.GothamBold))
 	end
@@ -235,8 +219,6 @@ function KillFeedController.Init()
 	UIAnimations.InitializePopObject(DeathScreen)
 	DeathMessage.RichText = true
 
-	-- The place file still carries the old single-line feed; it is replaced wholesale, so
-	-- retire the frame rather than leave an empty box parked on the HUD.
 	local legacyList = MainHUD:FindFirstChild("KillList")
 	if legacyList then
 		legacyList.Visible = false
@@ -250,9 +232,7 @@ function KillFeedController.Init()
 	end)
 
 	RoundRemotes.GetDeathScreenEvent().OnClientEvent:Connect(function(killerName, weaponName, victimsCount, placement, reward, roundKills)
-		-- The death screen is the one funnel every round outcome passes through, so the
-		-- result stingers live here. -2 is the existing "won the round" sentinel; team
-		-- losses and draws arrive as ProcessDeath with their reason in weaponName.
+
 		if victimsCount == -2 then
 			FXUtil.PlaySoundAt("Victory", SoundService)
 		elseif weaponName == "Lost The Round" or weaponName == "Drew The Round" then

@@ -10,9 +10,6 @@ local FXUtil = {}
 
 local lastMuzzleFlash = 0
 
--- Everything lands in WallDebrisFolder because MovementClient's wall probes and
--- WeaponServer's hitscan already exclude it. Effects parented anywhere else in Workspace
--- would block shots and trigger false wall runs.
 local function effectsFolder()
 	local folder = Workspace:FindFirstChild("WallDebrisFolder")
 	if not folder then
@@ -23,7 +20,6 @@ local function effectsFolder()
 	return folder
 end
 
--- Effects must never participate in physics or raycasts.
 local function makeEffectPart(shape)
 	local part = Instance.new("Part")
 	part.Shape = shape
@@ -44,8 +40,6 @@ local function soundTemplate(name)
 	return (template and template:IsA("Sound")) and template or nil
 end
 
--- Clones the SoundService template onto the emitting part so it plays positionally,
--- inheriting whatever volume and rolloff are set in Studio.
 function FXUtil.PlaySoundAt(name, parent, volumeScale)
 	local template = soundTemplate(name)
 	if not template or not parent then return end
@@ -58,8 +52,6 @@ function FXUtil.PlaySoundAt(name, parent, volumeScale)
 	Debris:AddItem(sound, 5)
 end
 
--- Sound with no visual, for moments that only need audio. Emits from a throwaway anchored
--- part so it is positional without depending on the character surviving the sound.
 function FXUtil.PlaySoundAtPosition(name, position, volumeScale)
 	if not soundTemplate(name) or not position then return end
 
@@ -83,7 +75,6 @@ function FXUtil.LandImpact(position)
 	if not config.Enabled then return end
 	FXUtil.PlaySoundAtPosition(config.Sound, position, config.SoundVolume)
 
-	-- Dust puff kicked out sideways at ground level.
 	if (config.DustParticles or 0) > 0 and position then
 		local emitterPart = makeEffectPart(Enum.PartType.Ball)
 		emitterPart.Transparency = 1
@@ -113,20 +104,12 @@ function FXUtil.LandImpact(position)
 	end
 end
 
--- Resolves where a gun's muzzle is without hard part-name dependencies - the reference
--- gunsystem dot-indexed .Muzzle and crashed on any gun that lacked it. Resolution order:
--- an Attachment named MuzzlePoint or Muzzle anywhere in the tool, then a BasePart whose
--- name contains "muzzle", then the front face of the handle, then the handle itself.
--- Always returns a world position; never yields, never throws.
 function FXUtil.GetMuzzlePosition(tool)
 	if not tool then return nil end
 
 	local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)
 	if not handle then return nil end
 
-	-- Named muzzle points win, but only when they are actually near the handle: a gun
-	-- cloned out of storage can carry decorative parts that were never welded into the
-	-- assembly, and a muzzle hundreds of studs away is worse than no muzzle at all.
 	local MAX_MUZZLE_OFFSET = 15
 
 	for _, d in tool:GetDescendants() do
@@ -149,8 +132,6 @@ function FXUtil.GetMuzzlePosition(tool)
 	return handle.Position + handle.CFrame.LookVector * (handle.Size.Z / 2)
 end
 
--- Red burst where a bullet lands on a character. Caller gates on the Blood Effects
--- setting, since this module is also required in contexts with no settings UI.
 function FXUtil.BodyHit(position, isHeadshot)
 	if not position then return end
 
@@ -181,8 +162,6 @@ function FXUtil.BodyHit(position, isHeadshot)
 	Debris:AddItem(emitterPart, 1)
 end
 
--- One Trail per character, between two vertical attachments on the root. The caller
--- toggles .Enabled by speed; recreating per toggle would leak attachments.
 function FXUtil.EnsureSpeedTrail(root)
 	local config = FXConfig.SpeedTrail
 	if not config.Enabled or not root then return nil end
@@ -257,8 +236,6 @@ function FXUtil.MuzzleFlash(position, scale)
 	Debris:AddItem(flash, config.Duration + 0.1)
 end
 
--- Brass casing flicked out to the shooter's right with spin. Pure dressing, so it is
--- physics-inert to everything else: no collisions with characters, no raycast presence.
 function FXUtil.EjectShell(position, rightVector)
 	if not position then return end
 
@@ -285,7 +262,6 @@ function FXUtil.EjectShell(position, rightVector)
 	Debris:AddItem(shell, 0.9)
 end
 
--- Expanding shockwave ring under the player, plus a whoosh.
 function FXUtil.DoubleJumpBurst(position)
 	local config = FXConfig.DoubleJump
 	if not config.Enabled or not position then return end
@@ -295,7 +271,7 @@ function FXUtil.DoubleJumpBurst(position)
 	ring.Color = config.Color
 	ring.Size = config.StartSize
 	ring.Transparency = 0.15
-	-- Rotate the cylinder's X axis to vertical so it reads as a flat disc on the ground.
+
 	ring.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
 	ring.Parent = effectsFolder()
 

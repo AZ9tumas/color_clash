@@ -1,24 +1,3 @@
---!strict
---[=[
-	@function splice
-	@within Array
-
-	@param array {T} -- The array to splice.
-	@param start? number -- The index to start splicing at (can be negative).
-	@param end? number -- The index to end splicing at (can be negative).
-	@param ... ...T -- The values to insert.
-	@return {T} -- The spliced array.
-
-	Splices an array.
-
-	```lua
-	local array = { 1, 2, 3, 4, 5 }
-
-	local new = Splice(array, 3, 4, 6, 7) -- { 1, 2, 6, 7, 4, 5 }
-	local new = Splice(array, -1, 0, 6, 7) -- { 1, 2, 3, 4, 6, 7 }
-	local new = Splice(array, 4, -1, 6, 7) -- { 1, 2, 3, 6, 7, 5 }
-	```
-]=]
 local function splice<T>(array: { T }, from: number?, to: number?, ...: T?): { T }
 	local length = #array
 	local result = {}

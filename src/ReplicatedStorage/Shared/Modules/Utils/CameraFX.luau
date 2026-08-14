@@ -6,11 +6,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local SettingsController = require(ReplicatedStorage.Shared.UIControllers.SettingsController)
 
--- Camera recoil, shake, aim FOV and fire blur, ported from the reference gunsystem's
--- CameraShake module. The core pattern is unchanged: undo last frame's offset, advance
--- the spring, reapply - so it stacks cleanly with anything else driving the camera
--- (MovementClient's camera roll included). What was deliberately not ported: the
--- LockFirstPerson camera mode - this game is third person.
 local CameraFX = {}
 
 local camera = Workspace.CurrentCamera
@@ -18,9 +13,6 @@ local camera = Workspace.CurrentCamera
 local RECOIL_STIFFNESS = 300
 local RECOIL_DAMPING = 15
 
--- A velocity impulse of X degrees against this spring peaks at roughly 0.037 * X, so
--- raw config values would be imperceptible. This scales a gun's Recoil.Pitch so the
--- configured number approximates the visible peak kick in degrees. Feel dial.
 local KICK_MULTIPLIER = 22
 
 local springPosition = Vector3.zero
@@ -46,13 +38,6 @@ local function updateRecoilSpring(dt)
 	camera.CFrame = camera.CFrame * CFrame.Angles(springPosition.X, springPosition.Y, springPosition.Z)
 end
 
--- Visual recoil: the spring kick that snaps and recovers, plus an FOV punch. The
--- PERMANENT aim displacement lives in FirstPersonRig.ApplyAimKick - only the rig owns
--- camera state that survives across frames, so it is the only place a lasting kick can
--- exist. The FOV punch exploits the settings loop: it lerps FieldOfView back toward
--- its target every frame, so a one-line bump gives a decaying zoom-out kick for free.
---
--- kickDegrees: X pitch (positive kicks up), Y yaw, Z roll.
 function CameraFX.Recoil(kickDegrees)
 	if not SettingsController.GetValue("Camera Shake") then return end
 
@@ -119,11 +104,6 @@ function CameraFX.Shake(magnitudeDegrees, duration, decayRate)
 	end
 end
 
--- FOV has exactly one continuous writer in this game: SettingsController's RenderStepped
--- loop (base FOV + Dynamic FOV). Tweening the camera directly from here loses a fight
--- with that loop every frame, so aiming publishes an override through a local attribute
--- that the loop treats as its target instead. The loop's own lerp provides the zoom
--- transition for free.
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
 
@@ -143,8 +123,6 @@ function CameraFX.IsAiming()
 	return localPlayer ~= nil and localPlayer:GetAttribute("AimFOV") ~= nil
 end
 
--- The reference system spawned a fresh BlurEffect per shot and faded a vignette with
--- chained wait() calls; one reused effect and one tween does the same job.
 local fireBlur = nil
 
 function CameraFX.FirePulse(size)

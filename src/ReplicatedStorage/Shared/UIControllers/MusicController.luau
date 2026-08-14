@@ -14,8 +14,6 @@ local FADE_TIME = 1.5
 
 local currentName = nil
 
--- Master and Music sliders both apply. GetValue falls back to the config default when a
--- slider has never been touched, but guard the type anyway: unknown names return false.
 local function settingScale()
 	local master = SettingsController.GetValue("Master Volume")
 	local music = SettingsController.GetValue("Music Volume")
@@ -24,8 +22,6 @@ local function settingScale()
 	return master * music
 end
 
--- The authored Studio volume is the mix ceiling; fades and sliders scale under it. It has
--- to be captured once, because the fades below mutate Sound.Volume directly.
 local function baseVolume(sound)
 	local base = sound:GetAttribute("BaseVolume")
 	if base == nil then
@@ -35,10 +31,6 @@ local function baseVolume(sound)
 	return base
 end
 
--- Track choice is driven by replicated state only, so it needs no remotes:
---   main menu            -> Lobby
---   Shoot phase          -> Action (spectators hear the action too, by design)
---   anything else        -> Calm (tile-picking, lobby area between rounds)
 local function desiredTrack()
 	if player:GetAttribute("InMenu") ~= false then
 		return "Lobby"
@@ -55,7 +47,7 @@ local function setTrack(name)
 
 	local target = folder:FindFirstChild(name)
 	if not target then
-		-- A missing track degrades to whichever exists rather than going silent.
+
 		for _, alt in {"Calm", "Lobby", "Action"} do
 			target = folder:FindFirstChild(alt)
 			if target then
@@ -70,8 +62,7 @@ local function setTrack(name)
 	for _, sound in folder:GetChildren() do
 		if sound:IsA("Sound") then
 			if sound == target then
-				-- Capture the authored volume BEFORE zeroing for the fade-in, or the
-				-- base gets stamped as 0 and the track fades to silence forever.
+
 				local fullVolume = baseVolume(sound) * settingScale()
 				if not sound.IsPlaying then
 					sound.Volume = 0
@@ -101,8 +92,6 @@ function MusicController.Init()
 
 	setTrack(desiredTrack())
 
-	-- Volume sliders have no change signal exposed, so follow them with the same 1s poll
-	-- the rest of the UI layer uses. Retweening to an unchanged target is a no-op visually.
 	task.spawn(function()
 		while true do
 			task.wait(1)

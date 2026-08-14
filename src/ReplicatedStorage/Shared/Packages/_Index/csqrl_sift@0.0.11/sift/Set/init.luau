@@ -1,17 +1,3 @@
---!strict
---[=[
-	@class Set
-
-	Sets are a collection of values. They are used to store unique values.
-	They are essentially a dictionary, but each value is stored as a boolean.
-	This means that a value can only be in a set once.
-
-	```lua
-	local set = { hello = true }
-
-	local newSet = Add(set, "world") -- { hello = true, world = true }
-	```
-]=]
 local set = {
 	add = require(script.add),
 	copy = require(script.copy),

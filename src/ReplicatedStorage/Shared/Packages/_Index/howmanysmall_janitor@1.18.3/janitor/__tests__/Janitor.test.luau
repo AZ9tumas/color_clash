@@ -1,6 +1,3 @@
---!optimize 2
---!strict
-
 _G.__IS_UNIT_TESTING__ = true
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -288,7 +285,7 @@ describe("Janitor.Remove", function()
 	end)
 
 	it("should properly remove values that are already destroyed", function()
-		-- credit to OverHash for pointing out this breaking.
+
 		local janitor = Janitor.new()
 		local value = 0
 

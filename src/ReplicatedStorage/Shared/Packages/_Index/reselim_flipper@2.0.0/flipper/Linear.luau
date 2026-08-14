@@ -3,7 +3,7 @@ Linear.__index = Linear
 
 function Linear.new(targetValue, options)
 	assert(targetValue, "Missing argument #1: targetValue")
-	
+
 	options = options or {}
 
 	return setmetatable({
@@ -14,7 +14,7 @@ end
 
 function Linear:step(state, dt)
 	local position = state.value
-	local velocity = self._velocity -- Linear motion ignores the state's velocity
+	local velocity = self._velocity
 	local goal = self._targetValue
 
 	local dPos = dt * velocity
@@ -25,7 +25,7 @@ function Linear:step(state, dt)
 		position = self._targetValue
 		velocity = 0
 	end
-	
+
 	return {
 		complete = complete,
 		value = position,

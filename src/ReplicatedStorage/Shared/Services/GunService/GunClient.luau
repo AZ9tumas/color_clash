@@ -6,6 +6,7 @@ local Shared = ReplicatedStorage.Shared
 local Items = require(Shared.Modules.Core.Items)
 local FXConfig = require(Shared.Modules.Core.FXConfig)
 local GunHandler = require(Shared.Classes.GunHandler)
+local MeleeHandler = require(Shared.Classes.MeleeHandler)
 
 local function log(message, ...)
 	if FXConfig.GunDebug then
@@ -13,10 +14,6 @@ local function log(message, ...)
 	end
 end
 
--- Entry point in the reference gunsystem's architecture: one controller per gun tool,
--- input routed to whichever controller is currently equipped. The reference built its
--- controllers once on a ClientGunInit signal; here tools are granted and stripped every
--- round phase, so controllers are built and torn down on backpack traffic instead.
 local GunClient = {}
 
 local player = Players.LocalPlayer
@@ -24,10 +21,9 @@ local player = Players.LocalPlayer
 local gunControllers = {}
 local currentlyEquippedGun = nil
 
-local function isGunTool(tool)
-	if not tool:IsA("Tool") then return false end
-	local data = Items[tool.Name]
-	return data ~= nil and data.MaxAmmo ~= nil
+local function weaponDataFor(tool)
+	if not tool:IsA("Tool") then return nil end
+	return Items[tool.Name]
 end
 
 local function teardown(tool)
@@ -47,11 +43,12 @@ local function teardown(tool)
 end
 
 local function setup(tool)
-	if not isGunTool(tool) then return end
+	local data = weaponDataFor(tool)
+	if not data then return end
 	if gunControllers[tool] then return end
 
-	-- Isolated per gun: a bad gun logs and is skipped, everything else keeps working.
-	local ok, controller = pcall(GunHandler.New, tool)
+	local factory = data.MaxAmmo and GunHandler.New or MeleeHandler.New
+	local ok, controller = pcall(factory, tool)
 	if not ok or not controller then
 		if not ok then
 			warn(string.format("[Gun] setup failed for %q: %s", tool.Name, tostring(controller)))
@@ -62,10 +59,6 @@ local function setup(tool)
 	gunControllers[tool] = controller
 	log("controller built for %s", tool.Name)
 
-	-- Equip state is DERIVED from where the tool actually is, never from event order:
-	-- with deferred signals a backpack-to-character hop can deliver a stale Unequipped
-	-- after the final Equipped, and trusting the sequence shuts the rig straight back
-	-- off. Parent checks cannot be reordered.
 	local function refreshEquipState()
 		if not gunControllers[tool] then return end
 		local shouldEquip = tool.Parent == player.Character
@@ -116,11 +109,15 @@ function GunClient.Init()
 		if processed or not currentlyEquippedGun then return end
 
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			currentlyEquippedGun:shoot()
+			if currentlyEquippedGun.shoot then
+				currentlyEquippedGun:shoot()
+			elseif currentlyEquippedGun.Swing then
+				currentlyEquippedGun:Swing()
+			end
 		elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
-			currentlyEquippedGun:ADS()
+			if currentlyEquippedGun.ADS then currentlyEquippedGun:ADS() end
 		elseif input.KeyCode == Enum.KeyCode.R then
-			currentlyEquippedGun:Reload()
+			if currentlyEquippedGun.Reload then currentlyEquippedGun:Reload() end
 		end
 	end)
 
@@ -128,9 +125,9 @@ function GunClient.Init()
 		if not currentlyEquippedGun then return end
 
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			currentlyEquippedGun:stopShoot()
+			if currentlyEquippedGun.stopShoot then currentlyEquippedGun:stopShoot() end
 		elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
-			currentlyEquippedGun:stopADS()
+			if currentlyEquippedGun.stopADS then currentlyEquippedGun:stopADS() end
 		end
 	end)
 

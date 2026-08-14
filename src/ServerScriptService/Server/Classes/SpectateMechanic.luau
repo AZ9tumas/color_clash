@@ -56,7 +56,7 @@ end
 function SpectateMechanic.Start(player)
 	if player.Parent ~= Players then return end
 	if player:GetAttribute("IsPlaying") then return end
-	-- Someone sitting in the main menu must not have their camera pulled into the arena.
+
 	if player:GetAttribute("InMenu") ~= false then return end
 
 	if #SpectateMechanic.GetActive() == 0 then

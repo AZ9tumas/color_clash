@@ -1,26 +1,8 @@
---!strict
 local Sift = script.Parent.Parent
 
 local Reduce = require(script.Parent.reduce)
 local None = require(Sift.None)
 
---[=[
-	@function zipAll
-	@within Array
-
-	@param ... ...{any} -- The arrays to zip.
-	@return {any} -- The zipped array.
-
-	Zips multiple arrays together into a single array, filling
-	in missing values with `None`.
-
-	```lua
-	local table1 = { 1, 2, 3, 4 }
-	local table2 = { "hello", "world", "goodbye" }
-
-	local new = ZipAll(table1, table2) -- { { 1, "hello" }, { 2, "world" }, { 3, "goodbye" }, { 4, None } }
-	```
-]=]
 local function zipAll<T>(...: { any }): T
 	local argCount = select("#", ...)
 	local arguments = { ... }

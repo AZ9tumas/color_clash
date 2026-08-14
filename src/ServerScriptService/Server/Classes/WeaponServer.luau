@@ -19,9 +19,6 @@ local KillFeedEvent = RoundRemotes.GetKillFeedEvent()
 
 local WeaponServer = {}
 
--- The kill feed is fed from here rather than from the death flow because this is where
--- the shot's own context still exists - which gun, and whether it was a headshot. Teams
--- ride along so each client can colour the row from its own point of view.
 local function announceKill(sourceName, sourcePlayer, victimName, victimPlayer, toolName, isHeadshot, reward)
 	KillFeedEvent:FireAllClients({
 		Killer = sourceName,
@@ -40,8 +37,6 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 
 	if not humanoid or humanoid.Health <= 0 then return false end
 
-	-- Friendly fire. ProcessDamage is the single funnel for melee and hitscan alike, so
-	-- this one gate covers every weapon. Gated on the mode so FFA is unaffected.
 	local mode = RoundConfig.CurrentMode
 	if mode.TeamBased and not mode.FriendlyFire and sourcePlayer and targetPlayer then
 		local sourceTeam = sourcePlayer:GetAttribute("Team")
@@ -58,7 +53,7 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 			if humanoid.Health - damage <= 0 then
 				targetPlayer:SetAttribute("IsPlaying", false)
 				humanoid.Health = humanoid.MaxHealth
-				
+
 				local currentKills = 1
 				local killReward = nil
 				if sourcePlayer then
@@ -68,7 +63,7 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 				local hrp = targetCharacter:FindFirstChild("HumanoidRootPart")
 				local sourceHRP = sourcePlayer and sourcePlayer.Character and sourcePlayer.Character:FindFirstChild("HumanoidRootPart")
 				local kbVelocity = Vector3.new(0, 80, 0)
-				
+
 				if hrp and sourceHRP then
 					local diff = hrp.Position - sourceHRP.Position
 					local flatDir = Vector3.new(diff.X, 0, diff.Z)
@@ -77,13 +72,13 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 					else
 						flatDir = Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)).Unit
 					end
-					
+
 					kbVelocity = (flatDir * 60) + Vector3.new(0, 80, 0)
 				end
-				
+
 				local lobbySpawn = Workspace:FindFirstChild("Spawnlocation")
 				PlayerUtil.RagdollAndTeleport(targetPlayer, lobbySpawn, kbVelocity)
-				
+
 				RewardManager.ProcessDeath(targetPlayer, sourceName, toolName or "Unknown Weapon", currentKills)
 				announceKill(sourceName, sourcePlayer, targetPlayer.Name, targetPlayer, toolName, isHeadshot, killReward)
 				return true
@@ -120,7 +115,7 @@ function WeaponServer.FireMelee(player, toolName, data)
 		local animId = data.Animations.Swing[humanoid.RigType.Name]
 		if animId then
 			local anim = Instance.new("Animation")
-			anim.AnimationId = "rbxassetid://" .. tostring(animId)
+			anim.AnimationId = animId
 			local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
 			animator:LoadAnimation(anim):Play()
 		end
@@ -128,7 +123,7 @@ function WeaponServer.FireMelee(player, toolName, data)
 
 	local overlapParams = OverlapParams.new()
 	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
-	
+
 	local ignoreList = {character}
 	local debrisFolder = Workspace:FindFirstChild("WallDebrisFolder")
 	if debrisFolder then table.insert(ignoreList, debrisFolder) end
@@ -162,15 +157,12 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid and data.Animations and data.Animations.Shoot then
 		local anim = Instance.new("Animation")
-		anim.AnimationId = "rbxassetid://" .. tostring(data.Animations.Shoot)
+		anim.AnimationId = data.Animations.Shoot
 		local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
 		animator:LoadAnimation(anim):Play()
 	end
 	if handle:FindFirstChild("FireSFX") then handle.FireSFX:Play() end
 
-	-- Tracers and flashes start at the actual muzzle when one can be found; the handle
-	-- is only the fallback. The multiplier comes from the server's own config, so a
-	-- client saying "I'm aiming" can only ever get the reduction this gun defines.
 	local origin = FXUtil.GetMuzzlePosition(tool) or handle.Position
 
 	local spread = data.Spread or 0
@@ -184,8 +176,7 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming)
 		local range = data.Range or 1000
 
 		if spread > 0 then
-			-- Float form: aim-reduced spread is fractional, and integer math.random(a, b)
-			-- errors on non-integer bounds.
+
 			local function jitter()
 				return (math.random() * 2 - 1) * spread / 1000
 			end
@@ -197,7 +188,7 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming)
 		if debrisFolder then table.insert(currentIgnore, debrisFolder) end
 		local baseModel = Workspace:FindFirstChild("Base")
 		if baseModel then table.insert(currentIgnore, baseModel) end
-		
+
 		local result = RaycastUtil.CastWithIgnore(origin, direction, range, currentIgnore, {"RepairP", "Repair"})
 
 		local visualTarget = origin + (direction * range)

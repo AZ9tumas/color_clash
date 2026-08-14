@@ -16,14 +16,9 @@ local function log(message, ...)
 	end
 end
 
--- Applies the shove with a LinearVelocity rather than writing AssemblyLinearVelocity.
--- The target's own client owns their character's physics, so a server-side velocity write
--- gets fought or discarded; a constraint replicates and the owning client simulates it.
--- Same mover and attachment pattern MovementClient uses for slide and wall-climb.
 local function applyPush(targetRoot, velocity)
 	local config = RoundConfig.Push
 
-	-- Repeated shoves must not stack movers on one character.
 	local existing = targetRoot:FindFirstChild("PushVelocity")
 	if existing then existing:Destroy() end
 
@@ -45,17 +40,12 @@ local function applyPush(targetRoot, velocity)
 	mover.VectorVelocity = velocity
 	mover.Parent = targetRoot
 
-	-- Impulse, not a sustained force: let it go after Duration.
 	Debris:AddItem(mover, config.Duration)
 end
 
--- Fully server-authoritative: the client only says "I pushed", the server decides who is
--- close enough to be hit and how hard, so a client cannot pick its own targets or force.
 local function tryPush(pusher)
 	local config = RoundConfig.Push
 
-	-- Legal for the whole round regardless of phase. IsPlaying is only true between the
-	-- round-start teleport and round end, so it covers both "round is on" and "is a player".
 	if not pusher:GetAttribute("IsPlaying") then
 		log("%s rejected: not IsPlaying, so not in the round", pusher.Name)
 		return

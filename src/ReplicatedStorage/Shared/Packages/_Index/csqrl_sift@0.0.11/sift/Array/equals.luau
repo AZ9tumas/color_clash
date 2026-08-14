@@ -1,4 +1,3 @@
---!strict
 local Sift = script.Parent.Parent
 
 local Util = require(Sift.Util)
@@ -23,24 +22,6 @@ local function compare(a, b)
 	return true
 end
 
---[=[
-	@function equals
-	@within Array
-
-	@param ... ...{any} -- The arrays to compare.
-	@return boolean -- Whether the arrays are equal.
-
-	Compares two arrays for equality.
-
-	```lua
-	local array = { 1, 2, 3 }
-	local other = { 1, 2, 3 }
-
-	local value = Equals(array, other) -- true
-	local value = Equals(array, other, { 1, 2, 3 }) -- true
-	local value = Equals(array, other, { 1, 2, 4 }) -- false
-	```
-]=]
 local function equals<T>(...: { T }): boolean
 	if Util.equalObjects(...) then
 		return true

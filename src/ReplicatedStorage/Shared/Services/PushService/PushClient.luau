@@ -31,8 +31,6 @@ function PushClient.Init()
 			return
 		end
 
-		-- Pushing is legal for the whole round, in every phase. IsPlaying is only true
-		-- between the round-start teleport and round end, so it is the only gate needed.
 		if player:GetAttribute("IsPlaying") ~= true then
 			log("click ignored: IsPlaying=%s, you are not in the round", tostring(player:GetAttribute("IsPlaying")))
 			return
@@ -53,7 +51,6 @@ function PushClient.Init()
 			return
 		end
 
-		-- Local throttle only, to keep the remote quiet. The server enforces the real one.
 		local now = tick()
 		local since = now - lastPush
 		if since < RoundConfig.Push.Cooldown then

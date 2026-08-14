@@ -9,7 +9,6 @@ local SpringHandler = require(Shared.Modules.Utils.Spring)
 local CombatRemotes = require(Shared.Remotes.CombatRemotes)
 local SettingsController = require(Shared.UIControllers.SettingsController)
 local FXConfig = require(Shared.Modules.Core.FXConfig)
-local Items = require(Shared.Modules.Core.Items)
 
 local function log(message, ...)
 	if FXConfig.GunDebug then
@@ -24,13 +23,13 @@ rig.__index = rig
 local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
-local HIP_OFFSET = Vector3.new(0, 0, 0)
-local ADS_OFFSET = Vector3.new(0, 0, 0)
+local HIP_OFFSET = Vector3.new(2.0, 0.6, 9)
+local ADS_OFFSET = Vector3.new(1.4, 0.45, 5.2)
 
-local EYE_HEIGHT_R6 = 1.5
-local EYE_HEIGHT_R15 = 2.0
+local FOCUS_HEIGHT = 1.4
 local PITCH_LIMIT = math.rad(75)
 local BASE_SENSITIVITY = 0.0022
+local YAW_FOLLOW_RATE = 16
 local NECK_PITCH_SCALE = 0.45
 
 local AIM_PITCH_SEND_INTERVAL = 0.1
@@ -49,40 +48,12 @@ local function movementOwnsRotation()
 	return false
 end
 
-local R15_HOLD_SHOULDER = math.rad(70)
-local R15_HOLD_YAW = math.rad(25)
-local R15_HOLD_ELBOW = math.rad(35)
-local R6_MELEE_HOLD_RIGHT = math.rad(55)
-local R6_MELEE_HOLD_LEFT = math.rad(15)
+local POSED_JOINTS = {
 
-local POSED_JOINTS_R6 = {
-	{ "Right Shoulder", "Torso", function(pitch, hold, meleeHold) return CFrame.Angles(0, 0, pitch + meleeHold * R6_MELEE_HOLD_RIGHT) end },
-	{ "Left Shoulder", "Torso", function(pitch, hold, meleeHold) return CFrame.Angles(0, 0, -(pitch + meleeHold * R6_MELEE_HOLD_LEFT)) end },
+	{ "Right Shoulder", "Torso", function(pitch) return CFrame.Angles(0, 0, pitch) end },
+	{ "Left Shoulder", "Torso", function(pitch) return CFrame.Angles(0, 0, -pitch) end },
 	{ "Neck", "Torso", function(pitch) return CFrame.Angles(-pitch * NECK_PITCH_SCALE, 0, 0) end },
 }
-
-local POSED_JOINTS_R15 = {
-	{ "RightShoulder", "RightUpperArm", function(pitch, hold) return CFrame.Angles(pitch + hold * R15_HOLD_SHOULDER, hold * R15_HOLD_YAW, 0) end },
-	{ "LeftShoulder", "LeftUpperArm", function(pitch, hold) return CFrame.Angles(pitch + hold * R15_HOLD_SHOULDER, -hold * R15_HOLD_YAW, 0) end },
-	{ "RightElbow", "RightLowerArm", function(pitch, hold) return CFrame.Angles(hold * R15_HOLD_ELBOW, 0, 0) end },
-	{ "LeftElbow", "LeftLowerArm", function(pitch, hold) return CFrame.Angles(hold * R15_HOLD_ELBOW, 0, 0) end },
-	{ "Neck", "Head", function(pitch) return CFrame.Angles(pitch * NECK_PITCH_SCALE, 0, 0) end },
-}
-
-local function posedJointsFor(humanoid)
-	if humanoid and humanoid.RigType == Enum.HumanoidRigType.R15 then
-		return POSED_JOINTS_R15
-	end
-	return POSED_JOINTS_R6
-end
-
-local ARM_PARTS = {
-	["Right Arm"] = true, ["Left Arm"] = true,
-	RightUpperArm = true, RightLowerArm = true, RightHand = true,
-	LeftUpperArm = true, LeftLowerArm = true, LeftHand = true,
-}
-
-local VIEWMODEL_WEAPON_NAME = "ViewmodelWeapon"
 
 local function findJoint(character, parentName, jointName)
 	local parent = character and character:FindFirstChild(parentName)
@@ -96,47 +67,12 @@ local function saveOriginalC0(joint)
 	return joint:GetAttribute("RigOriginalC0")
 end
 
-local function writeJointC0(joint, c0)
-	return (pcall(function()
-		joint.C0 = c0
-	end))
-end
-
 local function restoreJoints(character)
 	if not character then return end
-	for _, joints in { POSED_JOINTS_R6, POSED_JOINTS_R15 } do
-		for _, entry in joints do
-			local joint = findJoint(character, entry[2], entry[1])
-			if joint and joint:GetAttribute("RigOriginalC0") then
-				writeJointC0(joint, joint:GetAttribute("RigOriginalC0"))
-			end
-		end
-	end
-end
-
-local function applyBodyVisibility(character, hidden)
-	if not character then return end
-	local tool = character:FindFirstChildOfClass("Tool")
-	local toolData = tool and Items[tool.Name]
-	local toolVisible = tool ~= nil and not (toolData and toolData.MaxAmmo)
-	for _, part in character:GetDescendants() do
-		if part:IsA("BasePart") or part:IsA("Decal") then
-			if not part:FindFirstAncestor(VIEWMODEL_WEAPON_NAME) then
-				local target = 0
-				if hidden then
-					local refName = part:IsA("Decal") and (part.Parent and part.Parent.Name or "") or part.Name
-					if ARM_PARTS[refName] then
-						target = 0
-					elseif tool and part:IsDescendantOf(tool) then
-						target = toolVisible and 0 or 1
-					else
-						target = 1
-					end
-				end
-				if part.LocalTransparencyModifier ~= target then
-					part.LocalTransparencyModifier = target
-				end
-			end
+	for _, entry in POSED_JOINTS do
+		local joint = findJoint(character, entry[2], entry[1])
+		if joint and joint:GetAttribute("RigOriginalC0") then
+			joint.C0 = joint:GetAttribute("RigOriginalC0")
 		end
 	end
 end
@@ -156,7 +92,6 @@ function handler.new(tool, config)
 
 	local self = setmetatable({
 		tool = tool,
-		label = tool and tool.Name or "Player",
 
 		offsetSpring = SpringHandler.new(config.HipOffset or HIP_OFFSET),
 		hipOffset = config.HipOffset or HIP_OFFSET,
@@ -211,17 +146,14 @@ function rig:_update(dt)
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
-	if player:GetAttribute("IsPlaying") ~= true then
-		player:SetAttribute("GunCameraActive", false)
+	if player:GetAttribute("InMenu") ~= false then
 		if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
 			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		end
-		applyBodyVisibility(character, false)
 		return
 	end
 
 	if not root or not humanoid or humanoid.Health <= 0 or character:GetAttribute("Ragdolled") then
-		player:SetAttribute("GunCameraActive", false)
 		if camera.CameraType ~= Enum.CameraType.Custom then
 			camera.CameraType = Enum.CameraType.Custom
 		end
@@ -229,12 +161,8 @@ function rig:_update(dt)
 		if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
 			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		end
-		applyBodyVisibility(character, false)
 		return
 	end
-
-	player:SetAttribute("GunCameraActive", true)
-
 	if camera.CameraType ~= Enum.CameraType.Scriptable then
 		camera.CameraType = Enum.CameraType.Scriptable
 	end
@@ -263,37 +191,42 @@ function rig:_update(dt)
 		end
 	end
 
-	local eyeHeight = humanoid.RigType == Enum.HumanoidRigType.R15 and EYE_HEIGHT_R15 or EYE_HEIGHT_R6
-	local eye = root.Position + Vector3.new(0, eyeHeight, 0)
+	local focus = root.Position + Vector3.new(0, FOCUS_HEIGHT, 0)
 	local rotation = CFrame.fromOrientation(self.pitch + self.springPosition.X, self.yaw + self.springPosition.Y, 0)
 	local offset = self.offsetSpring.Position
-	local eyePosition = eye + rotation:VectorToWorldSpace(offset)
+	local idealPosition = focus + rotation:VectorToWorldSpace(Vector3.new(offset.X, offset.Y, offset.Z))
 
-	camera.CFrame = CFrame.lookAlong(eyePosition, rotation.LookVector)
-	camera.Focus = camera.CFrame
+	local toCamera = idealPosition - focus
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local ignore = { character }
+	local debris = Workspace:FindFirstChild("WallDebrisFolder")
+	if debris then table.insert(ignore, debris) end
+	params.FilterDescendantsInstances = ignore
+	local hit = Workspace:Raycast(focus, toCamera, params)
+	if hit then
+		idealPosition = hit.Position - toCamera.Unit * 0.5
+	end
 
-	applyBodyVisibility(character, true)
+	camera.CFrame = CFrame.lookAlong(idealPosition, rotation.LookVector)
+	camera.Focus = CFrame.new(focus)
 
 	if not movementOwnsRotation() then
 		humanoid.AutoRotate = false
 		local flatLook = rotation.LookVector * Vector3.new(1, 0, 1)
 		if flatLook.Magnitude > 0.001 then
-			root.CFrame = CFrame.new(root.Position) * CFrame.lookAlong(Vector3.zero, flatLook.Unit)
+			local targetRotation = CFrame.lookAlong(Vector3.zero, flatLook.Unit)
+			local currentRotation = root.CFrame.Rotation
+			root.CFrame = CFrame.new(root.Position) * currentRotation:Lerp(targetRotation, math.min(1, dt * YAW_FOLLOW_RATE))
 		end
 	end
 
 	local posePitch = self.pitch + self.springPosition.X
-	local heldTool = character:FindFirstChildOfClass("Tool")
-	local heldData = heldTool and Items[heldTool.Name]
-	local hold = heldTool and 1 or 0
-	local meleeHold = (heldTool and not (heldData and heldData.MaxAmmo)) and 1 or 0
-	for _, entry in posedJointsFor(humanoid) do
+	for _, entry in POSED_JOINTS do
 		local joint = findJoint(character, entry[2], entry[1])
-		if joint and not joint:GetAttribute("RigPoseLocked") then
+		if joint then
 			local original = saveOriginalC0(joint)
-			if not writeJointC0(joint, original * entry[3](posePitch, hold, meleeHold)) then
-				joint:SetAttribute("RigPoseLocked", true)
-			end
+			joint.C0 = original * entry[3](posePitch)
 		end
 	end
 
@@ -321,12 +254,12 @@ function rig:Enable()
 	player:SetAttribute("GunCameraActive", true)
 
 	bindSerial += 1
-	self.bindName = "FirstPerson_" .. self.label .. "_" .. bindSerial
+	self.bindName = "GunRig_" .. self.tool.Name .. "_" .. bindSerial
 	RunService:BindToRenderStep(self.bindName, Enum.RenderPriority.Camera.Value + 2, function(dt)
 		self:_update(dt)
 	end)
 
-	log("enabled for %s: first-person camera, mouse-delta aim, permanent recoil channel", self.label)
+	log("enabled for %s: scriptable combat camera, mouse-delta aim, permanent recoil channel", self.tool.Name)
 end
 
 function rig:Disable()
@@ -348,7 +281,6 @@ function rig:Disable()
 		humanoid.AutoRotate = true
 		camera.CameraSubject = humanoid
 	end
-	applyBodyVisibility(character, false)
 	restoreJoints(character)
 
 	self.aiming = false
@@ -359,28 +291,12 @@ function rig:Disable()
 
 	CombatRemotes.GetAimPitch():FireServer(0)
 
-	log("disabled for %s: camera returned to Roblox, body and joints restored", self.label)
+	log("disabled for %s: camera returned to Roblox, joints restored", self.tool.Name)
 end
 
 function rig:Destroy()
 	self:Disable()
 	self.offsetSpring:Destroy()
-end
-
-local shared = nil
-
-function handler.GetShared()
-	if not shared then
-		shared = handler.new(nil, nil)
-	end
-	return shared
-end
-
-function handler.GetPosePitch()
-	if shared and shared.enabled then
-		return shared.pitch + shared.springPosition.X
-	end
-	return 0
 end
 
 return handler

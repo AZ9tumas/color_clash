@@ -134,7 +134,6 @@ return function()
 			expect(promise:getStatus()).to.equal(Promise.Status.Rejected)
 			expect(tostring(promise._values[1]):find("hahah")).to.be.ok()
 
-			-- Loosely check for the pieces of the stack trace we expect
 			expect(tostring(promise._values[1]):find("init.spec")).to.be.ok()
 			expect(tostring(promise._values[1]):find("runExecutor")).to.be.ok()
 		end)
@@ -446,7 +445,6 @@ return function()
 			expect(promise:getStatus()).to.equal(Promise.Status.Rejected)
 			expect(tostring(promise._values[1]):find("hahah")).to.be.ok()
 
-			-- Loosely check for the pieces of the stack trace we expect
 			expect(tostring(promise._values[1]):find("init.spec")).to.be.ok()
 			expect(tostring(promise._values[1]):find("runExecutor")).to.be.ok()
 		end)
@@ -581,7 +579,7 @@ return function()
 				end)
 
 			promise:cancel()
-			promise:cancel() -- Twice to check call counts
+			promise:cancel()
 
 			expect(callCount).to.equal(0)
 			expect(finallyCallCount).to.equal(1)
@@ -598,7 +596,7 @@ return function()
 			end)
 
 			promise:cancel()
-			promise:cancel() -- Twice to check call count
+			promise:cancel()
 
 			expect(callCount).to.equal(1)
 		end)
@@ -688,15 +686,12 @@ return function()
 				callCount = callCount + 1
 			end
 
-			-- Resolved promise
 			Promise.new(function(resolve, reject)
 				resolve()
 			end):finally(finally)
 
-			-- Chained promise
 			Promise.resolve():andThen(function() end):finally(finally):finally(finally)
 
-			-- Rejected promise
 			Promise.reject():finally(finally)
 
 			local cancelledPromise = Promise.new(function() end):finally(finally)

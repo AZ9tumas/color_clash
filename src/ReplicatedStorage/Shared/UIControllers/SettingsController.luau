@@ -63,7 +63,7 @@ local function applyAccessibilitySettings()
 	ccColorblind.TintColor = Color3.fromRGB(255, 235, 235)
 	ccColorblind.Saturation = -0.15
 	ccColorblind.Enabled = SettingsController.GetValue("Colorblind Mode")
-	
+
 	local ccContrast = Lighting:FindFirstChild("HighContrastFilter")
 	if not ccContrast then
 		ccContrast = Instance.new("ColorCorrectionEffect")
@@ -78,7 +78,7 @@ end
 local function applyGraphicsSettings()
 	Lighting.GlobalShadows = SettingsController.GetValue("Dynamic Shadows")
 	Lighting.ShadowSoftness = SettingsController.GetValue("Soft Shadows") and 0.2 or 0
-	
+
 	if SettingsController.GetValue("Ambient Occlusion") then
 		Lighting.EnvironmentDiffuseScale = 1
 		Lighting.EnvironmentSpecularScale = 1
@@ -186,7 +186,7 @@ local function updateStatsVisibility()
 		if statsHolder then
 			local fpsFrame = statsHolder:FindFirstChild("FPS")
 			if fpsFrame then fpsFrame.Visible = shouldShow and (currentSettingsValues["Show FPS"] == true) end
-			
+
 			local pingFrame = statsHolder:FindFirstChild("Ping")
 			if pingFrame then pingFrame.Visible = shouldShow and (currentSettingsValues["Show Ping"] == true) end
 		end
@@ -284,7 +284,7 @@ local function loadSettingsCategory(categoryName)
 					if isOn then
 						offGrad.Enabled = false
 						onGrad.Enabled = true
-						onGrad.Offset = Vector2.new(-1, 0) 
+						onGrad.Offset = Vector2.new(-1, 0)
 						TweenService:Create(onGrad, TweenInfo.new(0.25, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Offset = Vector2.new(0, 0)}):Play()
 					else
 						onGrad.Enabled = false
@@ -440,7 +440,7 @@ function SettingsController.Init()
 			end
 		end
 	end
-	
+
 	updateTabVisuals("Video")
 	loadSettingsCategory("Video")
 
@@ -449,11 +449,11 @@ function SettingsController.Init()
 		for k, v in pairs(savedSettings) do
 			currentSettingsValues[k] = v
 		end
-		
+
 		if currentSettingsTab then
 			loadSettingsCategory(currentSettingsTab)
 		end
-		
+
 		applyAccessibilitySettings()
 		applyGraphicsSettings()
 		applyParticleRates()
@@ -470,23 +470,23 @@ function SettingsController.Init()
 	for _, gui in ipairs(PlayerGui:GetChildren()) do
 		bindStatsGui(gui)
 	end
-	
+
 	PlayerGui.ChildAdded:Connect(function(child)
-		if child.Name == "LoadingScreen" then 
-			updateStatsVisibility() 
+		if child.Name == "LoadingScreen" then
+			updateStatsVisibility()
 		else
 			bindStatsGui(child)
 		end
 	end)
-	
+
 	PlayerGui.ChildRemoved:Connect(function(child)
-		if child.Name == "LoadingScreen" then 
-			updateStatsVisibility() 
+		if child.Name == "LoadingScreen" then
+			updateStatsVisibility()
 		end
 	end)
-	
+
 	player:GetAttributeChangedSignal("InMenu"):Connect(updateStatsVisibility)
-	
+
 	Workspace.DescendantAdded:Connect(function(obj)
 		if obj:IsA("ParticleEmitter") then
 			if not obj:GetAttribute("OriginalRate") then
@@ -496,12 +496,12 @@ function SettingsController.Init()
 			obj.Rate = obj:GetAttribute("OriginalRate") * multiplier
 		end
 	end)
-	
+
 	local camera = Workspace.CurrentCamera
 	local lastCamCFrame = camera.CFrame
 	local motionBlur = Lighting:FindFirstChild("MotionBlur") or Instance.new("BlurEffect", Lighting)
 	motionBlur.Name = "MotionBlur"
-	
+
 	RunService.RenderStepped:Connect(function(dt)
 		local currentCamera = Workspace.CurrentCamera
 		if not currentCamera then return end
@@ -510,8 +510,6 @@ function SettingsController.Init()
 		local targetFov = baseFov
 		local isPlaying = player:GetAttribute("IsPlaying") == true
 
-		-- Aiming down sights (set locally by CameraFX) overrides everything else,
-		-- including Dynamic FOV - a sniper scope must not wobble with run speed.
 		local aimFov = player:GetAttribute("AimFOV")
 		if type(aimFov) == "number" then
 			targetFov = aimFov
@@ -525,7 +523,7 @@ function SettingsController.Init()
 				targetFov = baseFov + fovOffset
 			end
 		end
-		
+
 		currentCamera.FieldOfView = currentCamera.FieldOfView + (targetFov - currentCamera.FieldOfView) * math.min(1, dt * 10)
 
 		if SettingsController.GetValue("Motion Blur") then
@@ -541,18 +539,18 @@ function SettingsController.Init()
 
 		local baseLookSens = SettingsController.GetValue("Look Sensitivity") or 50
 		local sensMultiplier = baseLookSens / 50
-		
+
 		if SettingsController.GetValue("Aim Assist") and isPlaying then
 			local ray = currentCamera:ScreenPointToRay(mouse.X, mouse.Y)
 			local params = RaycastParams.new()
 			params.FilterType = Enum.RaycastFilterType.Exclude
-			
+
 			local ignoreList = {player.Character}
 			local debrisFolder = Workspace:FindFirstChild("WallDebrisFolder")
 			if debrisFolder then table.insert(ignoreList, debrisFolder) end
 			local baseModel = Workspace:FindFirstChild("Base")
 			if baseModel then table.insert(ignoreList, baseModel) end
-			
+
 			params.FilterDescendantsInstances = ignoreList
 
 			local result = Workspace:Raycast(ray.Origin, ray.Direction * 200, params)
@@ -563,7 +561,7 @@ function SettingsController.Init()
 				end
 			end
 		end
-		
+
 		UserInputService.MouseDeltaSensitivity = sensMultiplier
 	end)
 end

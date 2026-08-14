@@ -1,7 +1,5 @@
 local RunService = game:GetService("RunService")
 
--- Vector3 spring, ported from the reference gunsystem's SpringModule. Set Target and
--- read Position; it advances itself on Heartbeat until destroyed.
 local Spring = {}
 Spring.__index = Spring
 

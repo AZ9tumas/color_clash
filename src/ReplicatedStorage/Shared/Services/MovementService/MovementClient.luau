@@ -33,13 +33,8 @@ local climbEndTime = 0
 
 local isVaulting = false
 
--- Module scope so the viewmodel can read it. The roll is written into the camera from this
--- module's RenderStepped loop, which fires after every BindToRenderStep callback - so a
--- viewmodel positioned in the camera phase is looking at a camera that has not been rolled
--- yet, and has to apply the same roll itself or visibly detach while strafing.
 local currentRoll = 0
 
--- Camera roll in degrees, as applied to the camera this frame. Read by the viewmodel.
 function MovementClient.GetCameraRoll()
 	return currentRoll
 end
@@ -80,16 +75,16 @@ local function loadTracks()
 				tracks[name] = {}
 				for _, id in ipairs(idData) do
 					local anim = Instance.new("Animation")
-					anim.AnimationId = "rbxassetid://" .. tostring(id)
+					anim.AnimationId = id
 					local track = animator:LoadAnimation(anim)
 					track.Priority = Enum.AnimationPriority.Action4
 					table.insert(tracks[name], track)
 				end
-			elseif tonumber(idData) and tonumber(idData) ~= 0 then
+			elseif type(idData) == "string" and idData ~= "" then
 				local anim = Instance.new("Animation")
-				anim.AnimationId = "rbxassetid://" .. tostring(idData)
+				anim.AnimationId = idData
 				local track = animator:LoadAnimation(anim)
-				
+
 				if name == "Sprint" then
 					track.Priority = Enum.AnimationPriority.Movement
 				elseif name == "Slide" or name == "Vault" or name == "WallClimb" then
@@ -97,7 +92,7 @@ local function loadTracks()
 				else
 					track.Priority = Enum.AnimationPriority.Action3
 				end
-				
+
 				tracks[name] = track
 			end
 		end
@@ -158,15 +153,11 @@ local function groundSpeedForState()
 	return configVal("Speeds", "Walk", 22)
 end
 
--- Single place WalkSpeed is written. While airSpeed is set it wins over the ground speed,
--- which is what keeps momentum alive across the Sprint/Walk transitions that fire
--- constantly from the MoveDirection handler.
 local function applyMoveSpeed()
 	if not hum then return end
 
 	local speed = airSpeed or groundSpeedForState()
 
-	-- Aiming down sights slows movement, set by GunHandler while ADS is held.
 	local aimSlow = player:GetAttribute("AimSlowMultiplier")
 	if type(aimSlow) == "number" then
 		speed = speed * math.clamp(aimSlow, 0.2, 1)
@@ -184,9 +175,6 @@ local function horizontalSpeed()
 	return Vector3.new(v.X, 0, v.Z).Magnitude
 end
 
--- Roblox drives horizontal velocity toward MoveDirection * WalkSpeed even in mid-air, so
--- anything faster than WalkSpeed is braked away the moment you leave the ground. Raising
--- WalkSpeed to the launch speed is what converts a fast approach into actual distance.
 local function beginAirMomentum(fromSpeed)
 	if airOptions().PreserveMomentum == false then return end
 
@@ -209,7 +197,6 @@ local function setState(newState)
 	currentState = newState
 	player:SetAttribute("MovementState", newState)
 
-	-- Wall running drives its own speed, so any carried momentum ends here.
 	if string.find(newState, "WallRun") then airSpeed = nil end
 
 	applyMoveSpeed()
@@ -235,12 +222,12 @@ stopWallClimb = function()
 	if not isWallClimbing then return end
 	isWallClimbing = false
 	climbNormal = nil
-	if activeClimbVel then 
-		activeClimbVel:Destroy() 
-		activeClimbVel = nil 
+	if activeClimbVel then
+		activeClimbVel:Destroy()
+		activeClimbVel = nil
 	end
 	stopAllTracks()
-	
+
 	if wantsToSprint and hum and hum.MoveDirection.Magnitude > 0.1 then
 		setState("Sprint")
 	else
@@ -251,16 +238,16 @@ end
 startWallClimb = function(hitNormal)
 	isWallClimbing = true
 	climbNormal = hitNormal
-	
+
 	local climbDur = configVal("WallClimb", "Duration", 0.45)
 	climbEndTime = tick() + climbDur
 	setState("WallClimb")
-	
+
 	local climbSpd = configVal("WallClimb", "Speed", 45)
 	root.AssemblyLinearVelocity = Vector3.new(0, climbSpd, 0)
-	
+
 	if activeClimbVel then activeClimbVel:Destroy() end
-	
+
 	local att = root:FindFirstChild("RootRigAttachment") or root:FindFirstChild("RootAttachment")
 	activeClimbVel = Instance.new("LinearVelocity")
 	activeClimbVel.Name = "ClimbVelocity"
@@ -276,36 +263,36 @@ end
 performVault = function(targetPos)
 	isVaulting = true
 	setState("Vault")
-	
+
 	if isWallRunning then stopWallRun() end
 	if isWallClimbing then stopWallClimb() end
-	
+
 	stopAllTracks()
 	playTrack("Vault")
-	
+
 	local startPos = root.Position
 	local endCFrame = CFrame.lookAt(targetPos + Vector3.new(0, getDistToFloor() + 0.15, 0), targetPos + Vector3.new(0, getDistToFloor() + 0.15, 0) + root.CFrame.LookVector)
-	
+
 	root.Anchored = true
-	
+
 	local vaultDur = configVal("Vault", "Duration", 0.18)
 	local t = TweenService:Create(root, TweenInfo.new(vaultDur, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut), {CFrame = endCFrame})
 	t:Play()
-	
+
 	task.delay(vaultDur, function()
 		if not root then return end
 		root.Anchored = false
 		isVaulting = false
 		jumpsLeft = 1
-		
+
 		local spntSpd = configVal("Speeds", "Sprint", 34)
 		local wlkSpd = configVal("Speeds", "Walk", 22)
 		local walkSpd = wantsToSprint and spntSpd or wlkSpd
-		
+
 		local fVec = endCFrame.LookVector
 		local pushFlatDir = Vector3.new(fVec.X, 0, fVec.Z).Unit
 		root.AssemblyLinearVelocity = Vector3.new(pushFlatDir.X * walkSpd, -5, pushFlatDir.Z * walkSpd)
-		
+
 		if wantsToSprint and hum and hum.MoveDirection.Magnitude > 0 then
 			setState("Sprint")
 		else
@@ -356,7 +343,7 @@ performSlide = function()
 	local sSprint = configVal("Speeds", "Sprint", 34)
 	local targetSpeed = wantsToSprint and sSprint or sWalk
 	local slideDur = configVal("Slide", "Duration", 0.9)
-	
+
 	local tween = TweenService:Create(activeSlideVel, TweenInfo.new(slideDur, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
 		VectorVelocity = moveDir * targetSpeed
 	})
@@ -396,8 +383,6 @@ stopWallRun = function()
 		setState("Walk")
 	end
 
-	-- Running out of wall mid-air keeps the speed built up on it, rather than dropping to
-	-- sprint pace. setState above cleared airSpeed, so this has to come after it.
 	if hum and hum.FloorMaterial == Enum.Material.Air then
 		beginAirMomentum()
 	end
@@ -419,7 +404,7 @@ end
 
 function MovementClient.Init()
 	player:SetAttribute("MovementState", "Walk")
-	
+
 	local function onCharacterAdded(c)
 		char = c
 		hum = char:WaitForChild("Humanoid") :: Humanoid
@@ -431,14 +416,11 @@ function MovementClient.Init()
 			if lowerTorso then rootJoint = lowerTorso:FindFirstChild("Root") end
 		end
 
-		-- Fresh character: drop any momentum carried from the previous one.
 		airSpeed = nil
 		wasGrounded = true
 
 		hum.WalkSpeed = configVal("Speeds", "Walk", 22)
-		-- The place runs on JumpHeight, not JumpPower. Launch velocity is derived from
-		-- JumpHeight against full world gravity, so this has to shrink in step with
-		-- Air.GravityScale or the reduced gravity would send the apex up instead.
+
 		hum.UseJumpPower = false
 		hum.JumpHeight = configVal("Air", "JumpHeight", 7.2)
 		loadTracks()
@@ -535,7 +517,7 @@ function MovementClient.Init()
 	UserInputService.JumpRequest:Connect(function()
 		if char and char:GetAttribute("Ragdolled") then return end
 		if isVaulting then return end
-		
+
 		if isWallClimbing and climbNormal then
 			stopWallClimb()
 			local jumpOffForce = configVal("WallClimb", "JumpOffForce", 45)
@@ -544,7 +526,7 @@ function MovementClient.Init()
 			beginAirMomentum(Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude)
 			lastWallJumpTime = tick()
 			jumpsLeft = 1
-			
+
 			if hum then
 				hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 				task.delay(0.1, function()
@@ -561,7 +543,7 @@ function MovementClient.Init()
 
 				local maxSpd = configVal("WallRun", "MaxSpeed", 90)
 				local speedRatio = math.clamp(horizontalVel.Magnitude / maxSpd, 0, 1)
-				
+
 				local maxF = configVal("WallRun", "MaxForce", 90)
 				local jOff = configVal("WallRun", "JumpOffForce", 50)
 				local dynamicForceRange = maxF - jOff
@@ -585,9 +567,7 @@ function MovementClient.Init()
 				end
 			end
 		elseif isSliding then
-			-- Slide jump: the whole point of the slide is that jumping out of it launches
-			-- you. Capture the slide velocity before tearing the constraint down, then
-			-- carry it into the air instead of dropping back to sprint speed.
+
 			local slideVelocity = activeSlideVel and activeSlideVel.VectorVelocity or root.AssemblyLinearVelocity
 
 			if activeSlideVel then activeSlideVel:Destroy() end
@@ -616,11 +596,10 @@ function MovementClient.Init()
 					jumpsLeft -= 1
 					local currentVel = root.AssemblyLinearVelocity
 					local djPwr = configVal("Speeds", "DoubleJumpPower", 45)
-					
+
 					root.AssemblyLinearVelocity = Vector3.new(currentVel.X, djPwr, currentVel.Z)
 					hum:ChangeState(Enum.HumanoidStateType.Jumping)
 
-					-- Ring bursts from under the feet, not the torso.
 					FXUtil.DoubleJumpBurst(root.Position - Vector3.new(0, getDistToFloor(), 0))
 				end
 			end
@@ -630,14 +609,8 @@ function MovementClient.Init()
 	RunService.Heartbeat:Connect(function()
 		if not hum or not root then return end
 
-		-- Airborne gravity scaling. Resolved first, ahead of every early return below, so a
-		-- player who ragdolls or dies mid-air cannot keep a stale upward force and float.
-		-- Applies in the lobby too, so movement feels identical there and in the arena.
-		-- The wall-run branch further down overrides this with its own stronger scale.
 		if counterGravity and not isWallRunning then
-			-- Humanoid state, not FloorMaterial: FloorMaterial lags roughly 0.07s behind a
-			-- jump, and the velocity bled at full gravity during that window costs about a
-			-- quarter of the apex. State flips to Jumping on the launch frame.
+
 			local state = hum:GetState()
 			local airborne = (state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping)
 				and hum.Health > 0
@@ -655,10 +628,6 @@ function MovementClient.Init()
 		if hum.Health <= 0 then return end
 		if char and char:GetAttribute("Ragdolled") then return end
 
-		-- Capture speed the frame we leave the ground, release it the frame we land.
-		-- Wall states drive their own speed, so they opt out.
-		-- Speed trail: purely visual, driven by actual horizontal velocity so it covers
-		-- slides, slide jumps and wall runs without caring which state produced the speed.
 		local speedTrail = FXUtil.EnsureSpeedTrail(root)
 		if speedTrail then
 			speedTrail.Enabled = player:GetAttribute("IsPlaying") == true
@@ -667,8 +636,7 @@ function MovementClient.Init()
 
 		local grounded = hum.FloorMaterial ~= Enum.Material.Air
 		if not grounded then
-			-- Track the fastest descent of this fall so the landing sound can be gated on
-			-- it, otherwise every kerb and slope thuds.
+
 			fallSpeed = math.min(fallSpeed, root.AssemblyLinearVelocity.Y)
 		end
 
@@ -692,7 +660,7 @@ function MovementClient.Init()
 		end
 
 		if isSliding or isVaulting then return end
-		
+
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Exclude
 
@@ -704,13 +672,13 @@ function MovementClient.Init()
 		local rootVec = root.CFrame.LookVector
 		local flatLookDir = Vector3.new(rootVec.X, 0, rootVec.Z)
 		if flatLookDir.Magnitude > 0 then flatLookDir = flatLookDir.Unit else flatLookDir = Vector3.new(0, 0, -1) end
-		
+
 		if isWallClimbing then
 			if tick() > climbEndTime then
 				stopWallClimb()
 				return
 			end
-			
+
 			local headPos = root.Position + Vector3.new(0, 1.5, 0)
 			local hit = Workspace:Raycast(headPos, flatLookDir * 3.5, params)
 			if not hit then
@@ -724,28 +692,28 @@ function MovementClient.Init()
 			end
 			return
 		end
-		
+
 		local moveX, moveZ = hum.MoveDirection.X, hum.MoveDirection.Z
 		local flatMoveDir = Vector3.new(moveX, 0, moveZ)
 		local isMovingForward = false
-		
+
 		if flatMoveDir.Magnitude > 0.1 and wantsToSprint then
 			if flatMoveDir.Unit:Dot(flatLookDir) > 0.4 then
 				isMovingForward = true
 			end
 		end
-		
+
 		if isMovingForward then
 			local heightsToTest = {
 				root.Position - Vector3.new(0, 1.5, 0),
 				root.Position - Vector3.new(0, 0.5, 0),
 				root.Position + Vector3.new(0, 1.0, 0),
 			}
-			
+
 			local forwardHit = nil
 			for _, testPos in ipairs(heightsToTest) do
 				local tempHit = Workspace:Raycast(testPos, flatLookDir * 2.5, params)
-				
+
 				if tempHit then
 					if math.abs(tempHit.Normal.Y) < 0.25 then
 						forwardHit = tempHit
@@ -753,21 +721,21 @@ function MovementClient.Init()
 					end
 				end
 			end
-			
+
 			if forwardHit then
 				local vMin = configVal("Vault", "MinHeight", 0.5)
 				local vMax = configVal("Vault", "MaxHeight", 5.5)
 				local cMax = configVal("WallClimb", "MaxHeight", 12)
-				
+
 				local antiNormDepth = Vector3.new(-forwardHit.Normal.X, 0, -forwardHit.Normal.Z).Unit
 				local topTestStart = forwardHit.Position + (antiNormDepth * 0.4) + Vector3.new(0, cMax + 3, 0)
 				local testFloorHit = Workspace:Raycast(topTestStart, Vector3.new(0, -(cMax + 5), 0), params)
-				
+
 				if testFloorHit then
 					if math.abs(testFloorHit.Normal.Y) > 0.75 then
 						local trueFloor = getDistToFloor()
 						local targetDiffY = testFloorHit.Position.Y - (root.Position.Y - trueFloor)
-						
+
 						if targetDiffY >= vMin and targetDiffY <= vMax then
 							performVault(testFloorHit.Position)
 							return
@@ -860,14 +828,14 @@ function MovementClient.Init()
 	RunService.RenderStepped:Connect(function(dt)
 		if not hum or not root then return end
 		if char and char:GetAttribute("Ragdolled") then return end
-		
+
 		local isPlaying = player:GetAttribute("IsPlaying") == true
 		local isAlive = hum.Health > 0
 
 		local camera = Workspace.CurrentCamera
 		local cameraDist = (camera.Focus.Position - camera.CFrame.Position).Magnitude
 		local isFirstPerson = (camera.CameraType == Enum.CameraType.Custom and cameraDist < 1.25)
-		
+
 		local targetRoll = 0
 		local rightVector = camera.CFrame.RightVector
 
@@ -888,13 +856,11 @@ function MovementClient.Init()
 		end
 
 		currentRoll = currentRoll + (targetRoll - currentRoll) * math.min(1, dt * 8)
-		
+
 		if math.abs(currentRoll) > 0.01 then
 			camera.CFrame = camera.CFrame * CFrame.Angles(0, 0, math.rad(currentRoll))
 		end
 
-		-- "Something else is steering the character's facing": the gun rig says so outright,
-		-- melee/first-person is still inferred from the mouse lock it sets.
 		local isEquipped = player:GetAttribute("GunCameraActive") == true
 			or UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
 
