@@ -11,6 +11,7 @@ local CrosshairController = require(Shared.UIControllers.CrosshairController)
 local MainHudController = require(Shared.UIControllers.MainHudController)
 local RaycastUtil = require(Shared.Modules.Utils.RaycastUtil)
 local CameraFX = require(Shared.Modules.Utils.CameraFX)
+local Viewmodel = require(Shared.Classes.Viewmodel)
 
 local ToolConnections = CombatRemotes.GetToolConnections()
 local player = Players.LocalPlayer
@@ -89,6 +90,14 @@ function WeaponClient:Equip()
 	self.isEquipped = true
 	self.cancelReloadFlag = false
 	self.isHolding = false
+
+	-- Melee goes in the viewmodel's hands like everything else. There is no authored rig for
+	-- these, so the Tool's own Grip is the source - see Viewmodel:_holdTool. First person is
+	-- first person whatever is being held.
+	local viewmodel = Viewmodel.GetShared(self.data.Viewmodel)
+	if viewmodel then
+		viewmodel:SetWeapon(self.tool.Name, self.data.Viewmodel, self.tool)
+	end
 
 	self:UpdateUI()
 	if self.data.MaxAmmo then CrosshairController.SetCrosshairVisible(true) end
@@ -189,6 +198,13 @@ end
 
 function WeaponClient:Unequip()
 	self.isEquipped = false
+
+	-- The weapon leaves the hands; the hands stay. The viewmodel belongs to first person.
+	local viewmodel = Viewmodel.GetShared()
+	if viewmodel then
+		viewmodel:ClearWeapon()
+	end
+
 	self.cancelReloadFlag = true
 	self.isHolding = false
 
@@ -345,6 +361,21 @@ function WeaponClient:Fire()
 		
 		if self.swingTrack then self.swingTrack:Play(0.1) end
 		if self.shootTrack then self.shootTrack:Play(0.1) end
+
+		-- The swing animation plays on the CHARACTER, which is invisible in first person, so
+		-- the viewmodel needs its own. A rotational impulse into the same spring that carries
+		-- gun recoil gives the weapon a real arc that settles back, without needing a melee
+		-- clip authored against this rig. Scaled by the weapon's own shake so a bat swings
+		-- heavier than a knife.
+		local viewmodel = Viewmodel.GetShared()
+		if viewmodel then
+			local weight = (self.data.Shake and self.data.Shake.Intensity or 0.4)
+			viewmodel:applyRecoilImpulse(Vector3.new(
+				-38 * (0.5 + weight),
+				10 * (0.5 + weight) * (math.random() * 2 - 1),
+				14 * (0.5 + weight)
+			))
+		end
 		
 		local handle = self.tool:FindFirstChild("Handle") or self.tool:FindFirstChildWhichIsA("BasePart", true)
 		if self.data.Animations and self.data.Animations.Swing and handle and handle:FindFirstChild("MeleeSwingSound") then

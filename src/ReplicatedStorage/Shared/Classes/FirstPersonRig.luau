@@ -23,12 +23,13 @@ end
 --   2. truly permanent recoil - kicks are added straight into the pitch/yaw state, so
 --      the muzzle climb stays until the player pulls it back down.
 -- The eye rides the root at a fixed height rather than the Head part, so hold animations
--- and walk cycles cannot shake the view. What you see of yourself comes from the Viewmodel
--- class, not from this character - the real body is hidden locally (see
--- applyBodyVisibility). The neck and shoulders are still posed here from aim pitch, which
--- costs three joint writes and keeps the rig honest if a gun ever loads without a
--- viewmodel; what other clients actually render comes from the throttled AimPitch
+-- and walk cycles cannot shake the view. What you see of yourself comes entirely from the
+-- Viewmodel class - this character is hidden outright while the rig is up. The neck and
+-- shoulders are still posed here from aim pitch, but only so other clients have something
+-- to interpolate toward; what they actually render comes from the throttled AimPitch
 -- broadcast at the bottom of _update.
+--
+-- Lifetime is the round's, owned by FirstPersonController, not a weapon's.
 local handler = {}
 local rig = {}
 rig.__index = rig
@@ -38,8 +39,11 @@ local camera = Workspace.CurrentCamera
 
 -- Eye offsets in aim space: X right, Y up, Z back. Hip is the eye itself; ADS creeps the
 -- eye a touch forward and down, so settling into sights reads as more than an FOV change.
+-- Identical on purpose: aiming is a FOV change only, so the eye does not creep forward or
+-- drop when sights come up. The spring stays because recoil and the rest of the rig read
+-- from it; it simply has nowhere else to go.
 local HIP_OFFSET = Vector3.new(0, 0, 0)
-local ADS_OFFSET = Vector3.new(0, -0.08, -0.3)
+local ADS_OFFSET = Vector3.new(0, 0, 0)
 
 local EYE_HEIGHT_R6 = 1.5
 local EYE_HEIGHT_R15 = 2.0
@@ -97,27 +101,19 @@ end
 -- else still sees a whole character holding a whole gun. Decals carry the property too,
 -- which is what takes the face along with the head.
 --
--- Two hiding modes, and which one applies is not cosmetic. With a Viewmodel up, the whole
--- character goes - tool included - because the viewmodel supplies the arms and gun you
--- actually see and the real body only clips into them. Without one, hiding everything
--- would leave the player looking at nothing at all, so only the head and its accessories
--- go: that is the view you would otherwise be sitting inside.
-local function shouldHide(instance, fullBody)
-	if fullBody then return true end
-	if instance.Name == "Head" then return true end
-
-	local parent = instance.Parent
-	if not parent then return false end
-	-- The face is a Decal parented to the Head; hats and hair are Accessories, whose
-	-- Handle sits directly under them.
-	return parent.Name == "Head" or parent:IsA("Accessory")
-end
-
-local function applyBodyVisibility(character, hidden, fullBody)
+-- The WHOLE character goes, tool included. There is no partial mode.
+--
+-- Hiding only the head used to be the fallback when no viewmodel was up, on the theory that
+-- the player should still see something of themselves. In first person that theory is
+-- wrong: the eye sits at head height, so the torso is half a stud below the camera and the
+-- arms swing through the frame as the aim pitch poses the shoulders. What it produced was a
+-- screen full of limbs. The Viewmodel supplies everything the player is meant to see; when
+-- there is no viewmodel the correct view is an empty one.
+local function applyBodyVisibility(character, hidden)
 	if not character then return end
+	local target = hidden and 1 or 0
 	for _, part in character:GetDescendants() do
 		if part:IsA("BasePart") or part:IsA("Decal") then
-			local target = (hidden and shouldHide(part, fullBody)) and 1 or 0
 			-- Asserted every frame because the engine and the ragdoll path both reset this,
 			-- but only written on change - a blind write per part per frame is a property
 			-- signal storm for no gain.
@@ -143,6 +139,7 @@ function handler.new(tool, config)
 
 	local self = setmetatable({
 		tool = tool,
+		label = tool and tool.Name or "Player",
 
 		offsetSpring = SpringHandler.new(config.HipOffset or HIP_OFFSET),
 		hipOffset = config.HipOffset or HIP_OFFSET,
@@ -157,7 +154,6 @@ function handler.new(tool, config)
 		isSpringActive = false,
 
 		enabled = false,
-		viewmodelActive = false,
 		bindName = nil,
 		savedCameraType = nil,
 
@@ -185,12 +181,6 @@ function rig:ApplyAimKick(pitchDegrees, yawDegrees)
 	self.yaw = self.yaw - math.rad(yawDegrees)
 end
 
--- Set by GunHandler once it knows whether a viewmodel was actually built for this gun. It
--- decides whether the real body is hidden outright or only from the neck up.
-function rig:SetViewmodelActive(active)
-	self.viewmodelActive = active and true or false
-end
-
 function rig:StartADS()
 	self.aiming = true
 	self.offsetSpring.Target = self.adsOffset
@@ -206,10 +196,12 @@ function rig:_update(dt)
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 
-	-- Back in the menu: MenuController owns the camera there and its buttons need a free
-	-- cursor. The server strips the tool a beat after the client returns, so without this
-	-- that round trip is spent with the menu locked out.
-	if player:GetAttribute("InMenu") ~= false then
+	-- Not in the round: the menu, the lobby during voting, between rounds, or eliminated.
+	-- IsPlaying rather than InMenu, because InMenu goes false the moment Play is pressed and
+	-- the player then spends voting and team select standing in the lobby - which is not
+	-- somewhere to take the camera. It also covers the placement window at round start,
+	-- where IsPlaying is only set once the player has landed on the arena.
+	if player:GetAttribute("IsPlaying") ~= true then
 		player:SetAttribute("GunCameraActive", false)
 		if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
 			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
@@ -288,7 +280,7 @@ function rig:_update(dt)
 	camera.CFrame = CFrame.lookAlong(eyePosition, rotation.LookVector)
 	camera.Focus = camera.CFrame
 
-	applyBodyVisibility(character, true, self.viewmodelActive)
+	applyBodyVisibility(character, true)
 
 	-- Character yaw tracks the aim exactly, not on a lerp: in first person the arms and
 	-- the gun hang off the torso, so a body that eases into position drags the weapon
@@ -342,12 +334,12 @@ function rig:Enable()
 	player:SetAttribute("GunCameraActive", true)
 
 	bindSerial += 1
-	self.bindName = "GunRig_" .. self.tool.Name .. "_" .. bindSerial
+	self.bindName = "FirstPerson_" .. self.label .. "_" .. bindSerial
 	RunService:BindToRenderStep(self.bindName, Enum.RenderPriority.Camera.Value + 2, function(dt)
 		self:_update(dt)
 	end)
 
-	log("enabled for %s: first-person camera, mouse-delta aim, permanent recoil channel", self.tool.Name)
+	log("enabled for %s: first-person camera, mouse-delta aim, permanent recoil channel", self.label)
 end
 
 function rig:Disable()
@@ -380,12 +372,25 @@ function rig:Disable()
 
 	CombatRemotes.GetAimPitch():FireServer(0)
 
-	log("disabled for %s: camera returned to Roblox, body and joints restored", self.tool.Name)
+	log("disabled for %s: camera returned to Roblox, body and joints restored", self.label)
 end
 
 function rig:Destroy()
 	self:Disable()
 	self.offsetSpring:Destroy()
+end
+
+-- One rig per client, not one per gun. First person is the game's camera now - it is on
+-- from the moment the round starts and stays on through weapon swaps, empty hands and
+-- everything else. GunHandler borrows this one rather than standing up its own, which is
+-- also what stops an unequip from tearing the camera down mid-round.
+local shared = nil
+
+function handler.GetShared()
+	if not shared then
+		shared = handler.new(nil, nil)
+	end
+	return shared
 end
 
 return handler

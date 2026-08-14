@@ -56,7 +56,10 @@ function GunHandler.New(tool)
 		isAiming = false,
 		cancelReload = false,
 
-		rig = FirstPersonRig.new(tool, data.Rig),
+		-- Borrowed, not owned. FirstPersonController runs the camera for the whole round;
+		-- a gun only ever borrows it for ADS and recoil, and must never enable or disable it
+		-- or an unequip would drop the player out of first person mid-match.
+		rig = FirstPersonRig.GetShared(),
 		viewmodel = nil,
 		continuousFireConn = nil,
 
@@ -255,6 +258,8 @@ function gun:Reload()
 
 		if self.Properties.ReloadPerShell then
 			while self._ammo < self.Properties.MaxAmmo and self.isEquipped and not self.cancelReload do
+				-- Replayed per shell so the animation and the ammo counter tick together.
+				if self.viewmodel then self.viewmodel:PlayReload(duration) end
 				task.wait(duration)
 				if not self.isEquipped or self.cancelReload then break end
 				self._ammo += 1
@@ -262,6 +267,7 @@ function gun:Reload()
 				playHandleSound(self.tool, "ReloadSFX")
 			end
 		else
+			if self.viewmodel then self.viewmodel:PlayReload(duration) end
 			local elapsed = 0
 			while elapsed < duration and self.isEquipped and not self.cancelReload do
 				elapsed += task.wait(0.05)
@@ -273,6 +279,9 @@ function gun:Reload()
 		end
 
 		if reloadSound then reloadSound:Stop() end
+		if (self.cancelReload or not self.isEquipped) and self.viewmodel then
+			self.viewmodel:StopReload()
+		end
 		self.isReloading = false
 	end)
 end
@@ -287,36 +296,20 @@ function gun:Equip()
 	-- The reference's arrangement: one shared arm rig, and the weapon cloned into it on
 	-- equip and jointed to the hand. The grip offset is per gun because every model has its
 	-- handle in a different place and pointing a different way.
+	-- Shared and already up: first person owns the viewmodel, this only changes what is in
+	-- the hands. The weapon model comes from the authored rig, not from this Tool, so
+	-- nothing is cloned here.
 	local viewmodelConfig = self.Properties.Viewmodel
-	self.viewmodel = Viewmodel.new(viewmodelConfig)
+	self.viewmodel = Viewmodel.GetShared(viewmodelConfig)
 
 	if self.viewmodel then
-		local gunClone = self.tool:Clone()
-		-- A Tool inside a plain Model is inert, but strip the script side anyway so nothing
-		-- in the copy tries to run or make noise.
-		for _, descendant in gunClone:GetDescendants() do
-			if descendant:IsA("BaseScript") or descendant:IsA("Sound") then
-				descendant:Destroy()
-			end
+		if not self.viewmodel:SetWeapon(self.tool.Name, viewmodelConfig) then
+			warn(string.format("[Gun] %q has no authored rig - the viewmodel keeps empty hands", self.tool.Name))
 		end
-
-		local grip = viewmodelConfig and viewmodelConfig.GripOffset or CFrame.new()
-		if not self.viewmodel:AttachGun(gunClone, grip) then
-			gunClone:Destroy()
-			self.viewmodel:Destroy()
-			self.viewmodel = nil
-		end
-	end
-
-	if self.viewmodel then
-		self.viewmodel:Enable()
 	else
-		warn(string.format("[Gun] no viewmodel for %q - falling back to the real arms", self.tool.Name))
+		warn("[Gun] no viewmodel is up - first person may not be active yet")
 	end
 
-	self.rig:SetViewmodelActive(self.viewmodel ~= nil)
-
-	self.rig:Enable()
 	self:updateUI()
 	CrosshairController.SetCrosshairVisible(true)
 
@@ -369,13 +362,12 @@ function gun:Unequip()
 
 	self:stopShoot()
 	self:stopADS()
-	self.rig:Disable()
 
+	-- The weapon goes; the hands stay. The viewmodel belongs to first person, not to a gun.
 	if self.viewmodel then
-		self.viewmodel:Destroy()
+		self.viewmodel:ClearWeapon()
 		self.viewmodel = nil
 	end
-	self.rig:SetViewmodelActive(false)
 
 	if self.moveAnimConn then
 		self.moveAnimConn:Disconnect()

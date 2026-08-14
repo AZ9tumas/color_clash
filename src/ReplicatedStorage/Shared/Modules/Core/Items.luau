@@ -96,15 +96,17 @@ local Items = {
 		Shake = { Intensity = 1.5, Decay = 18 },
 		Recoil = { Pitch = 4.2, Yaw = 1.1 },
 		Aim = { FOV = 65, SpreadMultiplier = 0.4 },
-		-- Viewmodel framing, in the reference gunsystem's shape. Offset moves the whole arm
-		-- rig in camera space, AdsOffset is where it springs to while aiming, and GripOffset
-		-- is the Motor6D C1 that seats this weapon's Handle in the hand. GripOffset is the
-		-- one that always needs eyeballing - every model has its handle in a different place
-		-- pointing a different way.
+		-- Viewmodel framing. Offset moves the arm rig in camera space - the default drops it
+		-- 1.5 studs so the eye sits where an R6 head does - and AdsOffset is where it springs
+		-- to while aiming. There is no grip offset: the weapon is jointed on with the C0s
+		-- read from the authored rig, which is what keeps the reload animation driving the
+		-- magazine and trigger.
 		Viewmodel = {
+			-- Offset nudges the whole rig in camera space; zero means the reference rig's own
+			-- framing, which is already camera-authored. The grip is solved at runtime from
+			-- this weapon's authored Handle joint, so there is no grip value to keep in sync
+			-- here - add GripAdjust (a CFrame) only if a particular gun wants a nudge on top.
 			Offset = Vector3.zero,
-			AdsOffset = Vector3.new(-1.15, 0, 0),
-			GripOffset = CFrame.new(0, -0.269, 1.158) * CFrame.Angles(0, math.rad(-90), math.rad(90)),
 		},
 		Animations = { Shoot = 86304083830215, Reload = 84055323674335, Idle = 76788131144151, Walk = 74737589673617, Sprint = 74737589673617 }
 	},
@@ -113,15 +115,17 @@ local Items = {
 		Shake = { Intensity = 4.0, Decay = 7 },
 		Recoil = { Pitch = 9.5, Yaw = 1.6 },
 		Aim = { FOV = 30, SpreadMultiplier = 0.1 },
-		-- Viewmodel framing, in the reference gunsystem's shape. Offset moves the whole arm
-		-- rig in camera space, AdsOffset is where it springs to while aiming, and GripOffset
-		-- is the Motor6D C1 that seats this weapon's Handle in the hand. GripOffset is the
-		-- one that always needs eyeballing - every model has its handle in a different place
-		-- pointing a different way.
+		-- Viewmodel framing. Offset moves the arm rig in camera space - the default drops it
+		-- 1.5 studs so the eye sits where an R6 head does - and AdsOffset is where it springs
+		-- to while aiming. There is no grip offset: the weapon is jointed on with the C0s
+		-- read from the authored rig, which is what keeps the reload animation driving the
+		-- magazine and trigger.
 		Viewmodel = {
+			-- Offset nudges the whole rig in camera space; zero means the reference rig's own
+			-- framing, which is already camera-authored. The grip is solved at runtime from
+			-- this weapon's authored Handle joint, so there is no grip value to keep in sync
+			-- here - add GripAdjust (a CFrame) only if a particular gun wants a nudge on top.
 			Offset = Vector3.zero,
-			AdsOffset = Vector3.new(-1.15, 0, 0),
-			GripOffset = CFrame.new(0, -0.269, 1.158) * CFrame.Angles(0, math.rad(-90), math.rad(90)),
 		},
 		Animations = { Shoot = 101828241949203, Reload = 93766855465736, Idle = 98715180840350, Walk = 133471749603993, Sprint = 133471749603993 }
 	},
@@ -130,15 +134,17 @@ local Items = {
 		Shake = { Intensity = 0.8, Decay = 12 },
 		Recoil = { Pitch = 2.6, Yaw = 0.9 },
 		Aim = { FOV = 55, SpreadMultiplier = 0.45 },
-		-- Viewmodel framing, in the reference gunsystem's shape. Offset moves the whole arm
-		-- rig in camera space, AdsOffset is where it springs to while aiming, and GripOffset
-		-- is the Motor6D C1 that seats this weapon's Handle in the hand. GripOffset is the
-		-- one that always needs eyeballing - every model has its handle in a different place
-		-- pointing a different way.
+		-- Viewmodel framing. Offset moves the arm rig in camera space - the default drops it
+		-- 1.5 studs so the eye sits where an R6 head does - and AdsOffset is where it springs
+		-- to while aiming. There is no grip offset: the weapon is jointed on with the C0s
+		-- read from the authored rig, which is what keeps the reload animation driving the
+		-- magazine and trigger.
 		Viewmodel = {
+			-- Offset nudges the whole rig in camera space; zero means the reference rig's own
+			-- framing, which is already camera-authored. The grip is solved at runtime from
+			-- this weapon's authored Handle joint, so there is no grip value to keep in sync
+			-- here - add GripAdjust (a CFrame) only if a particular gun wants a nudge on top.
 			Offset = Vector3.zero,
-			AdsOffset = Vector3.new(-1.15, 0, 0),
-			GripOffset = CFrame.new(0, -0.269, 1.158) * CFrame.Angles(0, math.rad(-90), math.rad(90)),
 		},
 		Animations = { Shoot = 98842943786422, Reload = 70986236399168, Idle = 127694603378551, Walk = 116073209021469, Sprint = 116073209021469 }
 	},
@@ -147,15 +153,17 @@ local Items = {
 		Shake = { Intensity = 0.5, Decay = 16 },
 		Recoil = { Pitch = 1.9, Yaw = 0.8 },
 		Aim = { FOV = 58, SpreadMultiplier = 0.5 },
-		-- Viewmodel framing, in the reference gunsystem's shape. Offset moves the whole arm
-		-- rig in camera space, AdsOffset is where it springs to while aiming, and GripOffset
-		-- is the Motor6D C1 that seats this weapon's Handle in the hand. GripOffset is the
-		-- one that always needs eyeballing - every model has its handle in a different place
-		-- pointing a different way.
+		-- Viewmodel framing. Offset moves the arm rig in camera space - the default drops it
+		-- 1.5 studs so the eye sits where an R6 head does - and AdsOffset is where it springs
+		-- to while aiming. There is no grip offset: the weapon is jointed on with the C0s
+		-- read from the authored rig, which is what keeps the reload animation driving the
+		-- magazine and trigger.
 		Viewmodel = {
+			-- Offset nudges the whole rig in camera space; zero means the reference rig's own
+			-- framing, which is already camera-authored. The grip is solved at runtime from
+			-- this weapon's authored Handle joint, so there is no grip value to keep in sync
+			-- here - add GripAdjust (a CFrame) only if a particular gun wants a nudge on top.
 			Offset = Vector3.zero,
-			AdsOffset = Vector3.new(-1.15, 0, 0),
-			GripOffset = CFrame.new(0, -0.269, 1.158) * CFrame.Angles(0, math.rad(-90), math.rad(90)),
 		},
 		Animations = { Shoot = 93777660426232, Reload = 116733200772749, Idle = 124267210387896, Walk = 128330126585616, Sprint = 128330126585616 }
 	},
@@ -164,15 +172,17 @@ local Items = {
 		Shake = { Intensity = 1.0, Decay = 10 },
 		Recoil = { Pitch = 3.4, Yaw = 1.0 },
 		Aim = { FOV = 55, SpreadMultiplier = 0.4 },
-		-- Viewmodel framing, in the reference gunsystem's shape. Offset moves the whole arm
-		-- rig in camera space, AdsOffset is where it springs to while aiming, and GripOffset
-		-- is the Motor6D C1 that seats this weapon's Handle in the hand. GripOffset is the
-		-- one that always needs eyeballing - every model has its handle in a different place
-		-- pointing a different way.
+		-- Viewmodel framing. Offset moves the arm rig in camera space - the default drops it
+		-- 1.5 studs so the eye sits where an R6 head does - and AdsOffset is where it springs
+		-- to while aiming. There is no grip offset: the weapon is jointed on with the C0s
+		-- read from the authored rig, which is what keeps the reload animation driving the
+		-- magazine and trigger.
 		Viewmodel = {
+			-- Offset nudges the whole rig in camera space; zero means the reference rig's own
+			-- framing, which is already camera-authored. The grip is solved at runtime from
+			-- this weapon's authored Handle joint, so there is no grip value to keep in sync
+			-- here - add GripAdjust (a CFrame) only if a particular gun wants a nudge on top.
 			Offset = Vector3.zero,
-			AdsOffset = Vector3.new(-1.15, 0, 0),
-			GripOffset = CFrame.new(0, -0.269, 1.158) * CFrame.Angles(0, math.rad(-90), math.rad(90)),
 		},
 		Animations = { Shoot = 133379495548916, Reload = 116854355282803, Idle = 127694603378551, Walk = 116073209021469, Sprint = 116073209021469 }
 	},
@@ -181,15 +191,17 @@ local Items = {
 		Shake = { Intensity = 3.5, Decay = 8 },
 		Recoil = { Pitch = 8.5, Yaw = 2.0 },
 		Aim = { FOV = 62, SpreadMultiplier = 0.6 },
-		-- Viewmodel framing, in the reference gunsystem's shape. Offset moves the whole arm
-		-- rig in camera space, AdsOffset is where it springs to while aiming, and GripOffset
-		-- is the Motor6D C1 that seats this weapon's Handle in the hand. GripOffset is the
-		-- one that always needs eyeballing - every model has its handle in a different place
-		-- pointing a different way.
+		-- Viewmodel framing. Offset moves the arm rig in camera space - the default drops it
+		-- 1.5 studs so the eye sits where an R6 head does - and AdsOffset is where it springs
+		-- to while aiming. There is no grip offset: the weapon is jointed on with the C0s
+		-- read from the authored rig, which is what keeps the reload animation driving the
+		-- magazine and trigger.
 		Viewmodel = {
+			-- Offset nudges the whole rig in camera space; zero means the reference rig's own
+			-- framing, which is already camera-authored. The grip is solved at runtime from
+			-- this weapon's authored Handle joint, so there is no grip value to keep in sync
+			-- here - add GripAdjust (a CFrame) only if a particular gun wants a nudge on top.
 			Offset = Vector3.zero,
-			AdsOffset = Vector3.new(-1.15, 0, 0),
-			GripOffset = CFrame.new(0, -0.269, 1.158) * CFrame.Angles(0, math.rad(-90), math.rad(90)),
 		},
 		Animations = { Shoot = 140337976272295, Reload = 84283526160957, Idle = 128036426437584, Walk = 113147747937745, Sprint = 113147747937745 }
 	}
