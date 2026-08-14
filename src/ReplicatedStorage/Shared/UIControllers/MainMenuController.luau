@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage.Shared
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
@@ -38,34 +39,42 @@ local function reset()
 	Title.Text = defaultText
 end
 
+local function toggleReturnToMenu()
+	if isCounting then
+		reset()
+		return
+	end
+
+	isCounting = true
+	runToken += 1
+	local myToken = runToken
+
+	task.spawn(function()
+		for remaining = COUNTDOWN, 1, -1 do
+			if runToken ~= myToken then return end
+			Title.Text = tostring(remaining)
+			task.wait(1)
+		end
+		if runToken ~= myToken then return end
+
+		reset()
+		RoundRemotes.GetMainMenuEvent():FireServer()
+		MenuController.ReturnToMenu()
+	end)
+end
+
 function MainMenuController.Init()
 	UIAnimations.BindButtonAnimations(MainMenuBtn)
 
 	local backdrop = findBackdrop(MainMenuBtn)
 
-	MainMenuBtn.MouseButton1Click:Connect(function()
+	MainMenuBtn.MouseButton1Click:Connect(toggleReturnToMenu)
 
-		if isCounting then
-			reset()
-			return
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed or player:GetAttribute("InMenu") ~= false then return end
+		if input.KeyCode == Enum.KeyCode.M then
+			toggleReturnToMenu()
 		end
-
-		isCounting = true
-		runToken += 1
-		local myToken = runToken
-
-		task.spawn(function()
-			for remaining = COUNTDOWN, 1, -1 do
-				if runToken ~= myToken then return end
-				Title.Text = tostring(remaining)
-				task.wait(1)
-			end
-			if runToken ~= myToken then return end
-
-			reset()
-			RoundRemotes.GetMainMenuEvent():FireServer()
-			MenuController.ReturnToMenu()
-		end)
 	end)
 
 	if backdrop then
