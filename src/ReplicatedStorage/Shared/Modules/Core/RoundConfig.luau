@@ -35,7 +35,8 @@ RoundConfig.TeamColors = {
 RoundConfig.TeamSelectDuration = 10
 
 RoundConfig.Phases = {
-	PushDuration = 10,
+	FirstPushDuration = 5,
+	PushDuration = 0,
 	AnnounceDuration = 5,
 	HiddenDuration = 15,
 

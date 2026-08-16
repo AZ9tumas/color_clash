@@ -18,6 +18,11 @@ local DataTemplate = {
 	Quests = {
 		Stats = {},
 		Completed = {}
+	},
+	DailyRewards = {
+		LastClaimedDay = 0,
+		Streak = 0,
+		TotalClaimed = 0
 	}
 }
 

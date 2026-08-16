@@ -38,6 +38,7 @@ function RoundMechanic:Start()
 		local cycle = 0
 		local ramp = phases.Ramp or {}
 		local function scaled(base, phaseKey)
+			if base <= 0 then return 0 end
 			if not ramp.Enabled then return base end
 			local floor = (ramp.Min and ramp.Min[phaseKey]) or base
 			return math.max(floor, math.floor(base * (ramp.Factor or 1) ^ cycle + 0.5))
@@ -71,9 +72,13 @@ function RoundMechanic:Start()
 
 		task.wait(0.25)
 
+		local firstPushTime = phases.FirstPushDuration or phases.PushDuration
+
 		setPhase(PHASE_PUSH)
-		RoundRemotes.GetColorEvent():FireAllClients("Next", phases.PushDuration)
-		hold(phases.PushDuration)
+		if firstPushTime > 0 then
+			RoundRemotes.GetColorEvent():FireAllClients("Next", firstPushTime)
+			hold(firstPushTime)
+		end
 
 		while inGame() do
 
@@ -140,8 +145,10 @@ function RoundMechanic:Start()
 			cycle += 1
 
 			local pushTime = scaled(phases.PushDuration, "Push")
-			RoundRemotes.GetColorEvent():FireAllClients("Next", pushTime)
-			hold(pushTime)
+			if pushTime > 0 then
+				RoundRemotes.GetColorEvent():FireAllClients("Next", pushTime)
+				hold(pushTime)
+			end
 		end
 	end)
 

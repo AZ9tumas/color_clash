@@ -107,16 +107,86 @@ end
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
 
+local AIM_VIGNETTE_COLOR = Color3.fromRGB(0, 0, 0)
+local AIM_VIGNETTE_TRANSPARENCY = 0.45
+local AIM_VIGNETTE_FADE_IN = 0.12
+local AIM_VIGNETTE_FADE_OUT = 0.1
+
+local AIM_VIGNETTE_EDGES = {
+	{ position = UDim2.fromScale(0, 0), size = UDim2.fromScale(1, 0.3), rotation = 90 },
+	{ position = UDim2.fromScale(0, 0.7), size = UDim2.fromScale(1, 0.3), rotation = -90 },
+	{ position = UDim2.fromScale(0, 0), size = UDim2.fromScale(0.22, 1), rotation = 0 },
+	{ position = UDim2.fromScale(0.78, 0), size = UDim2.fromScale(0.22, 1), rotation = 180 },
+}
+
+local aimVignetteFrames = nil
+
+local function buildAimVignette()
+	local playerGui = localPlayer and localPlayer:FindFirstChild("PlayerGui")
+	if not playerGui then return false end
+
+	local existing = playerGui:FindFirstChild("AimVignette")
+	if existing then existing:Destroy() end
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "AimVignette"
+	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 4
+	gui.ResetOnSpawn = false
+	gui.Parent = playerGui
+
+	aimVignetteFrames = {}
+
+	for _, edge in AIM_VIGNETTE_EDGES do
+		local frame = Instance.new("Frame")
+		frame.Position = edge.position
+		frame.Size = edge.size
+		frame.BackgroundColor3 = AIM_VIGNETTE_COLOR
+		frame.BackgroundTransparency = 1
+		frame.BorderSizePixel = 0
+		frame.Parent = gui
+
+		local gradient = Instance.new("UIGradient")
+		gradient.Rotation = edge.rotation
+		gradient.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		gradient.Parent = frame
+
+		table.insert(aimVignetteFrames, frame)
+	end
+
+	return true
+end
+
+local function setAimVignette(active)
+	if not aimVignetteFrames or not aimVignetteFrames[1] or not aimVignetteFrames[1].Parent then
+		if not buildAimVignette() then return end
+	end
+
+	local target = active and AIM_VIGNETTE_TRANSPARENCY or 1
+	local duration = active and AIM_VIGNETTE_FADE_IN or AIM_VIGNETTE_FADE_OUT
+
+	for _, frame in aimVignetteFrames do
+		TweenService:Create(frame, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundTransparency = target,
+		}):Play()
+	end
+end
+
 function CameraFX.SetAim(fov)
 	if localPlayer then
 		localPlayer:SetAttribute("AimFOV", fov)
 	end
+	setAimVignette(true)
 end
 
 function CameraFX.ClearAim()
 	if localPlayer then
 		localPlayer:SetAttribute("AimFOV", nil)
 	end
+	setAimVignette(false)
 end
 
 function CameraFX.IsAiming()
