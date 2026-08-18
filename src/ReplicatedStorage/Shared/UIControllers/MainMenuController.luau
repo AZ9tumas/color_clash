@@ -39,7 +39,23 @@ local function reset()
 	Title.Text = defaultText
 end
 
+local function showRoundStarting()
+	reset()
+	local token = runToken
+	Title.Text = "Round Starting"
+	task.delay(1.25, function()
+		if runToken == token and not isCounting then
+			Title.Text = defaultText
+		end
+	end)
+end
+
 local function toggleReturnToMenu()
+	if player:GetAttribute("MenuReturnLocked") then
+		showRoundStarting()
+		return
+	end
+
 	if isCounting then
 		reset()
 		return
@@ -52,10 +68,18 @@ local function toggleReturnToMenu()
 	task.spawn(function()
 		for remaining = COUNTDOWN, 1, -1 do
 			if runToken ~= myToken then return end
+			if player:GetAttribute("MenuReturnLocked") then
+				showRoundStarting()
+				return
+			end
 			Title.Text = tostring(remaining)
 			task.wait(1)
 		end
 		if runToken ~= myToken then return end
+		if player:GetAttribute("MenuReturnLocked") then
+			showRoundStarting()
+			return
+		end
 
 		reset()
 		RoundRemotes.GetMainMenuEvent():FireServer()
@@ -69,6 +93,11 @@ function MainMenuController.Init()
 	local backdrop = findBackdrop(MainMenuBtn)
 
 	MainMenuBtn.MouseButton1Click:Connect(toggleReturnToMenu)
+	player:GetAttributeChangedSignal("MenuReturnLocked"):Connect(function()
+		if player:GetAttribute("MenuReturnLocked") and isCounting then
+			showRoundStarting()
+		end
+	end)
 
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed or player:GetAttribute("InMenu") ~= false then return end

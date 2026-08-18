@@ -8,6 +8,7 @@ Most cross-system state is expressed through attributes. Before adding another B
 | --- | --- | --- | --- |
 | `InMenu` | Boolean | `RoundServer` | `true` while the player is in the main menu; gameplay clients generally require `false` |
 | `IsPlaying` | Boolean | `RoundServer` and elimination logic | Player is alive and participating in the active round |
+| `MenuReturnLocked` | Boolean or nil | `RoundServer` | Return-to-menu is temporarily blocked while the selected player is being placed and admitted into the round |
 | `Team` | string or nil | `RoundServer` | Selected team name during a team round |
 | `Kills` | number | `RewardManager`/`RoundServer` | Kills in the current round |
 | `RoundCash` | number | `RewardManager`/`RoundServer` | Kill cash earned in the current round |
@@ -55,6 +56,8 @@ stateDiagram-v2
 ```
 
 `InMenu` and `IsPlaying` are independent. A player can be outside the menu but not actively alive, which is the lobby/spectator state. Code that tests only one of these attributes may activate in the wrong state.
+
+Round admission is a short critical transition. `RoundServer` sets `MenuReturnLocked = true` when an eligible player enters the round placement queue, sets `IsPlaying = true` after placement, and immediately clears the lock. `MainMenuController` cancels or rejects its countdown while locked, and the server independently rejects `MainMenuEvent` during the same window. Both checks are required because a client-only guard cannot close the network race.
 
 ## Round lifecycle
 

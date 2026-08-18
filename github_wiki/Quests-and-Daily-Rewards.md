@@ -25,21 +25,24 @@ Current update APIs:
 
 Friend-play progress is checked when a player joins by comparing them with players already in the server.
 
-There is currently no quest remote or dedicated quest frontend. `QuestServer.GetQuests(player)` returns the server-side quest state for future backend integrations.
+`QuestRemotes.GetQuestState` exposes a read-only snapshot containing `Stats` and `Completed`. `QuestUpdated` is pushed after every authoritative stat increment. `RewardsController` consumes both paths: it fetches on panel selection and applies pushed snapshots while the Quests panel is open.
+
+Quest rewards remain automatic. Crossing a goal marks the quest complete and grants its reward on the server; the frontend displays progress and completion but never sends a claim request.
 
 ## Adding a quest
 
 1. Reuse an existing `Stat`, or add a clearly named update API and call it from the authoritative server event.
 2. Add a stable unique quest ID to `QuestConfig.Quests`.
-3. Set `Goal`, `Name`, and a supported reward.
-4. Confirm a profile cannot earn it twice.
-5. If a frontend is added, return definitions and progress without letting the client grant or mark completion.
+3. Add the same ID to `QuestConfig.Order` at the intended display position.
+4. Set `Goal`, `Name`, and a supported reward.
+5. Confirm a profile cannot earn it twice.
+6. Confirm the Rewards screen renders the new card and updates after the authoritative stat event.
 
 Quest IDs are persisted in `Completed`; changing an ID creates a different quest for existing players.
 
 ## Daily rewards
 
-The daily reward system is backend-only by design. Configuration is in `DailyRewardConfig`, state and claims are handled by `DailyRewardServer`, and access is through two RemoteFunctions in `DailyRewardRemotes`.
+Configuration is in `DailyRewardConfig`, state and claims are handled by `DailyRewardServer`, and access is through two RemoteFunctions in `DailyRewardRemotes`. `RewardsController` renders the schedule from the existing `StarterGui.Rewards` templates, invokes claims, and maintains the visible reset countdown.
 
 Current rules:
 
@@ -92,16 +95,49 @@ Daily reward granters currently support:
 
 Unknown keys in a reward definition are ignored. To add a reward type, implement a server granter, define its value schema, add a backward-compatible data field if needed, and document the client display format.
 
-## Adding the frontend
+## Rewards frontend
 
-A future UI should:
+`RewardsController` is auto-loaded with the other UI controllers. It expects this Studio-owned hierarchy:
 
-1. invoke `GetStateFunction()` when opened;
-2. render the server-provided schedule and current day;
-3. disable claim when `CanClaim` is false;
-4. invoke `ClaimFunction()` once per click with local request debouncing;
-5. render only the server response as success;
-6. refresh cash/inventory presentation after a successful claim;
-7. show reset time as a countdown but refresh state when it reaches zero.
+```text
+PlayerGui.Rewards.Frame
+├── Category.ScrollingFrame
+│   ├── DailyRewards.btn
+│   └── Quests.btn
+├── MainFrame.Container
+│   ├── Section
+│   └── Template
+└── ExitButton.btn
+```
+
+The controller hides `Section` and `Template`, then clones them at runtime in the same style as `ShopController`.
+
+The Daily Rewards panel:
+
+- renders every schedule entry supplied by the server;
+- enables only the currently claimable card;
+- debounces the claim RemoteFunction;
+- trusts only the server result before showing `Claimed`;
+- displays the next reset countdown and refreshes state at zero.
+
+The Quests panel:
+
+- renders definitions in `QuestConfig.Order`;
+- combines replicated definitions with server-owned progress;
+- displays progress or `Completed` without a client claim action;
+- refreshes from `QuestUpdated` while visible.
+
+The main-menu button is named `DailyRewards`, but it opens the complete Rewards screen containing both panels.
+
+## Frontend verification
+
+In a local Studio playtest:
+
+1. Open Daily Rewards from the main menu and confirm seven cards are generated.
+2. Claim an available day and confirm the button changes to `Claimed` only after the server response.
+3. Confirm the next reward displays a live reset countdown.
+4. Switch to Quests and confirm all IDs in `QuestConfig.Order` render.
+5. Trigger a quest stat from its authoritative server path and confirm progress updates without reopening the panel.
+6. Exit and reopen Rewards to confirm both panels re-fetch persisted state.
 
 Do not send reward IDs, streak values, or desired reward contents from the client. The current API intentionally accepts no claim arguments.

@@ -20,4 +20,19 @@ QuestConfig.Quests = {
 	ShotTen = { Stat = "ShotsLanded", Goal = 10, Name = "Shoot 10 players", Reward = { Weapon = "Wooden Bat" } },
 }
 
+QuestConfig.Order = {
+	"OneFriend",
+	"PlayOne",
+	"PlayFive",
+	"WinOne",
+	"WinFive",
+	"SecondOne",
+	"SecondThree",
+	"GetEliminated",
+	"GetShot",
+	"ShotOne",
+	"ShotFive",
+	"ShotTen",
+}
+
 return QuestConfig

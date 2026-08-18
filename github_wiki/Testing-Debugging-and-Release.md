@@ -17,8 +17,9 @@ The repository has vendored package tests but no game-level automated test suite
 - New client loads without infinite yields.
 - Menu camera stays on `Workspace.Cam`.
 - Play transitions out of menu once.
-- Shop, leaderboard, and settings open and close.
+- Shop, leaderboard, settings, and Rewards open and close.
 - `M` and Main Menu button start a five-second countdown; a second activation cancels it.
+- Trigger menu return during round admission; the client shows `Round Starting`, the server rejects `MainMenuEvent`, and the player enters the round with `InMenu = false`.
 - Return-to-menu removes round participation, tools, spectating, and combat camera ownership.
 
 ### Rounds
@@ -66,6 +67,8 @@ The repository has vendored package tests but no game-level automated test suite
 - Equipped Main/Melee persist and are granted in Shoot.
 - Quest counters complete once and grant the configured reward.
 - Daily state, successful claim, duplicate same-day claim, missed-day reset, loop behavior, cash, and weapon reward all work.
+- Daily cards render the configured schedule, claim state, and live reset countdown.
+- Quest cards render every `QuestConfig.Order` entry and update from `QuestUpdated` without reopening Rewards.
 - Settings load, save, and apply after reconnect.
 
 ### UI and audio
@@ -74,6 +77,7 @@ The repository has vendored package tests but no game-level automated test suite
 - Keys 1/2 and slot buttons equip the correct class.
 - Crosshair toggles and dynamic bloom work.
 - FPS/ping/performance visibility respects settings and menu state.
+- Daily Rewards and Quests switch cleanly, remain scrollable, and contain no overlapping generated cards.
 - Lobby/Calm/Action music transitions without overlapping at full volume.
 - Missing optional sound templates fail silently rather than throwing.
 - Spectate start/next/previous/exit works as targets die or leave.

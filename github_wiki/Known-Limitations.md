@@ -42,14 +42,6 @@ Arms and root are real-character driven, but gun geometry, joint offsets, hold, 
 
 ## Feature completeness
 
-### Daily rewards have no frontend
-
-State, persistence, configuration, and claim remotes exist. No player-facing ScreenGui/controller has been implemented.
-
-### Quests have no frontend or client API
-
-Progress and rewards work server-side. There is no quest UI or dedicated remote for reading quest definitions/progress.
-
 ### Chests are placeholders
 
 `ChestServer` creates ProximityPrompts, prints an open message, disables the prompt for five seconds, then re-enables it. It does not grant loot, persist state, animate a chest, or validate a reward table.

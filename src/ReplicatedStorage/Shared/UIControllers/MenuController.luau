@@ -27,6 +27,8 @@ local LeaderboardGui = PlayerGui:WaitForChild("Leaderboard")
 local LeaderboardFrameUI = LeaderboardGui:WaitForChild("Frame")
 local SettingsGui = PlayerGui:WaitForChild("Settings")
 local SettingsFrameUI = SettingsGui:WaitForChild("Frame")
+local RewardsGui = PlayerGui:WaitForChild("Rewards")
+local RewardsFrameUI = RewardsGui:WaitForChild("Frame")
 
 local MenuButtonsHolder = MenuHolder:WaitForChild("ButtonsHolder")
 local MenuScrollingFrame = MenuButtonsHolder:WaitForChild("ScrollingFrame")
@@ -120,16 +122,19 @@ function MenuController.Init()
 	ShopGui.Enabled = true
 	LeaderboardGui.Enabled = true
 	SettingsGui.Enabled = true
+	RewardsGui.Enabled = true
 
 	UIAnimations.InitializePopObject(MenuHolder)
 	UIAnimations.InitializePopObject(ShopFrameUI)
 	UIAnimations.InitializePopObject(LeaderboardFrameUI)
 	UIAnimations.InitializePopObject(SettingsFrameUI)
+	UIAnimations.InitializePopObject(RewardsFrameUI)
 
 	setupMenuButton(PlayFrame, UDim2.new(0.374, 0, 0.116, 0), UDim2.new(1, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
 	setupMenuButton(MenuScrollingFrame.Shop, UDim2.new(0.375, 0, 0.116, 0), UDim2.new(1, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
 	setupMenuButton(MenuScrollingFrame.Settings, UDim2.new(0.193, 0, 0.116, 0), UDim2.new(0.866, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
 	setupMenuButton(MenuScrollingFrame.Leaderboard, UDim2.new(0.193, 0, 0.116, 0), UDim2.new(0.81, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
+	setupMenuButton(MenuScrollingFrame.DailyRewards, UDim2.new(0.193, 0, 0.116, 0), UDim2.new(1, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
 
 	local SpectateFrame = MenuScrollingFrame:FindFirstChild("Spectate")
 	if SpectateFrame then
@@ -142,18 +147,22 @@ function MenuController.Init()
 	MenuScrollingFrame.Shop.btn.MouseButton1Click:Connect(function() if not playClicked then openSubMenu(ShopFrameUI) end end)
 	MenuScrollingFrame.Leaderboard.btn.MouseButton1Click:Connect(function() if not playClicked then openSubMenu(LeaderboardFrameUI) end end)
 	MenuScrollingFrame.Settings.btn.MouseButton1Click:Connect(function() if not playClicked then openSubMenu(SettingsFrameUI) end end)
+	MenuScrollingFrame.DailyRewards.btn.MouseButton1Click:Connect(function() if not playClicked then openSubMenu(RewardsFrameUI) end end)
 
 	local ShopExitBtn = ShopFrameUI:WaitForChild("ExitButton"):WaitForChild("btn")
 	local LeaderboardExitBtn = LeaderboardFrameUI:WaitForChild("ExitButton"):WaitForChild("btn")
 	local SettingsExitBtn = SettingsFrameUI:WaitForChild("ExitButton"):WaitForChild("btn")
+	local RewardsExitBtn = RewardsFrameUI:WaitForChild("ExitButton"):WaitForChild("btn")
 
 	UIAnimations.BindButtonAnimations(ShopExitBtn)
 	UIAnimations.BindButtonAnimations(LeaderboardExitBtn)
 	UIAnimations.BindButtonAnimations(SettingsExitBtn)
+	UIAnimations.BindButtonAnimations(RewardsExitBtn)
 
 	ShopExitBtn.MouseButton1Click:Connect(function() closeSubMenu(ShopFrameUI) end)
 	LeaderboardExitBtn.MouseButton1Click:Connect(function() closeSubMenu(LeaderboardFrameUI) end)
 	SettingsExitBtn.MouseButton1Click:Connect(function() closeSubMenu(SettingsFrameUI) end)
+	RewardsExitBtn.MouseButton1Click:Connect(function() closeSubMenu(RewardsFrameUI) end)
 
 	startMenuCamera()
 

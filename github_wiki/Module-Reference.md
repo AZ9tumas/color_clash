@@ -25,7 +25,7 @@ This is the quick ownership and public-API index. Private local functions are in
 | `DataTemplate` | new profile schema |
 | `RewardConfig` | placement and kill cash |
 | `ShopConfig` | categories, prices, descriptions, ranged/melee classification |
-| `QuestConfig` | quest definitions and rewards |
+| `QuestConfig` | quest definitions, display order, and rewards |
 | `DailyRewardConfig` | UTC reset, streak/loop rules, reward schedule |
 | `SettingsConfig` | settings UI schema and defaults |
 | `FXConfig` | shared sound folder, debug flags, and movement/weapon visual tuning |
@@ -66,13 +66,14 @@ This is the quick ownership and public-API index. Private local functions are in
 | `FirstPersonController` | enables/disables singleton rig and viewmodel from `IsPlaying` |
 | `KillfeedController` | kill feed and death/win screen |
 | `MainHudController` | `SetWeaponInfo`, health and weapon slots |
-| `MainMenuController` | return-to-menu countdown and `M` input |
+| `MainMenuController` | return-to-menu countdown, `M` input, and admission-lock presentation |
 | `MenuController` | `ReturnToMenu`, menu camera and navigation |
 | `MusicController` | state-based music crossfade |
 | `PromptController` | custom ProximityPrompt UI |
 | `RoundUIController` | state, timer, vote, color, scoreboard UI |
 | `SettingsController` | `GetValue`, dynamic UI, persistence, runtime application |
 | `ShopController` | shop list, purchase/equip, physical zones |
+| `RewardsController` | daily schedule/claim/countdown and quest progress rendering |
 | `SpectateController` | spectator controls and camera subject |
 | `TeamVisualsController` | team Highlights |
 | `TeamsController` | team selection GUI |
@@ -93,7 +94,7 @@ This is the quick ownership and public-API index. Private local functions are in
 | --- | --- |
 | `DataServer` | profile lifecycle; `ProfileLoaded`, `GetProfile`, `WaitForProfile`, `GetData` |
 | `CurrencyServer` | cash/win/kill mutation and reads |
-| `RoundServer` | round loop and round remote listeners |
+| `RoundServer` | round loop, admission lock, and round remote listeners |
 | `CombatServer` | combat cooldown/phase validation and aim-pitch receiver |
 | `MovementServer` | movement state/speed receiver and speed clamp |
 | `PushServer` | authoritative push target/force logic |
@@ -106,4 +107,4 @@ This is the quick ownership and public-API index. Private local functions are in
 
 ## Remote wrappers
 
-`CombatRemotes`, `RoundRemotes`, `MovementRemotes`, `ShopRemotes`, `SettingsRemotes`, `DailyRewardRemotes`, and `SpectateRemotes` expose getter functions for the remote Instances they own. Exact payloads are in [Networking and Security](Networking-and-Security).
+`CombatRemotes`, `RoundRemotes`, `MovementRemotes`, `ShopRemotes`, `SettingsRemotes`, `DailyRewardRemotes`, `QuestRemotes`, and `SpectateRemotes` expose getter functions for the remote Instances they own. Exact payloads are in [Networking and Security](Networking-and-Security).

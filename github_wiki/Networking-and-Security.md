@@ -24,7 +24,7 @@ Remote wrapper modules under `Shared.Remotes` create their Instances when requir
 | `DeathScreenEvent` | server → one client | killer, weapon, victim count, placement, reward, round kills |
 | `PlayGameEvent` | client → server | no arguments |
 | `ResetEvent` | client → server | no arguments |
-| `MainMenuEvent` | client → server | no arguments |
+| `MainMenuEvent` | client → server | no arguments; rejected while `MenuReturnLocked` is true |
 | `SelectTeamEvent` | client → server | `teamName` |
 
 ## Economy and settings remotes
@@ -38,6 +38,8 @@ Remote wrapper modules under `Shared.Remotes` create their Instances when requir
 | `SettingsRemotes` | `UpdateSetting` | RemoteEvent | settingName, value |
 | `DailyRewardRemotes` | `GetDailyReward` | RemoteFunction | no args → daily state |
 | `DailyRewardRemotes` | `ClaimDailyReward` | RemoteFunction | no args → claim result |
+| `QuestRemotes` | `GetQuestState` | RemoteFunction | no args → `{ Stats, Completed }` snapshot |
+| `QuestRemotes` | `QuestUpdated` | RemoteEvent | server → client authoritative quest-state snapshot |
 
 ## Other remotes
 
@@ -67,6 +69,8 @@ The client may predict presentation, but it must not decide damage, rewards, own
 - Push repeats lifecycle, team, range, direction, and cooldown checks on the server.
 - Shop derives price and category from server config and uses server cash.
 - Daily reward state and reward contents are fully server-selected.
+- Quest progress, completion, and reward grants are server-owned; the client receives display snapshots only.
+- Return-to-menu is checked on both sides during round admission, with the server guard treated as authoritative.
 - Spectate actions resolve targets from a server-owned active-player list.
 
 ## Current hardening gaps

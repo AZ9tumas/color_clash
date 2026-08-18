@@ -4,10 +4,18 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local QuestConfig = require(Shared.Modules.Core.QuestConfig)
+local QuestRemotes = require(Shared.Remotes.QuestRemotes)
 local DataServer = require(ServerScriptService.Server.Services.DataService.DataServer)
 local CurrencyServer = require(ServerScriptService.Server.Services.CurrencyService.CurrencyServer)
 
 local QuestServer = {}
+
+local function snapshot(quests)
+	return {
+		Stats = table.clone(quests.Stats),
+		Completed = table.clone(quests.Completed),
+	}
+end
 
 local function questData(player)
 	local profile = DataServer.GetProfile(player)
@@ -50,6 +58,10 @@ local function bump(player, stat)
 			giveReward(player, quest.Reward)
 		end
 	end
+
+	if player.Parent == Players then
+		QuestRemotes.GetUpdatedEvent():FireClient(player, snapshot(quests))
+	end
 end
 
 function QuestServer.UpdateGamesPlayed(player) bump(player, "Plays") end
@@ -61,10 +73,16 @@ function QuestServer.UpdateShotsLanded(player) bump(player, "ShotsLanded") end
 function QuestServer.UpdateFriendPlays(player) bump(player, "FriendPlays") end
 
 function QuestServer.GetQuests(player)
-	return questData(player)
+	local quests = questData(player)
+	return quests and snapshot(quests) or nil
 end
 
 function QuestServer.Init()
+	QuestRemotes.GetStateFunction().OnServerInvoke = function(player)
+		DataServer.WaitForProfile(player)
+		return QuestServer.GetQuests(player)
+	end
+
 	Players.PlayerAdded:Connect(function(player)
 		task.spawn(function()
 			DataServer.WaitForProfile(player)

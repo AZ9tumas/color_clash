@@ -10,8 +10,8 @@ Keep UI hierarchy changes and controller changes in the same commit.
 
 | Controller | Main Studio dependencies | Responsibility |
 | --- | --- | --- |
-| `MenuController` | `PlayerGui.Menu`, `Shop`, `Leaderboard`, `Settings`, `Workspace.Cam` | Menu camera, Play, submenus, loading transition, menu spectate entry |
-| `MainMenuController` | `MainHUD.MainMenuButton` | Five-second return-to-menu countdown; button or `M` toggles/cancels |
+| `MenuController` | `PlayerGui.Menu`, `Shop`, `Leaderboard`, `Settings`, `Rewards`, `Workspace.Cam` | Menu camera, Play, submenus, loading transition, menu spectate entry |
+| `MainMenuController` | `MainHUD.MainMenuButton` | Five-second return-to-menu countdown; button or `M` toggles/cancels; blocks during round admission |
 | `RoundUIController` | `MainHUD.Message`, `ButtonsHolder`, `Top` | voting, timers, color announcements, scoreboard |
 | `TeamsController` | `PlayerGui.Teams.ButtonsHolder` | team picker and balance labels |
 | `MainHudController` | `MainHUD.Weapons`, `HealthBar` | weapon slots, ammo/name, health, reset override, keys 1/2 |
@@ -19,6 +19,7 @@ Keep UI hierarchy changes and controller changes in the same commit.
 | `KillfeedController` | `MainHUD.DeathScreen` | kill-feed rows and elimination/win summary |
 | `SpectateController` | `MainHUD.Spectate`, `SpectateButton` | target camera, previous/next/exit controls |
 | `ShopController` | `PlayerGui.Shop.Frame` templates | category rendering, buy/equip, physical Shop/Skins zones |
+| `RewardsController` | `PlayerGui.Rewards.Frame` templates | Daily Rewards claims/countdown and Quest progress/completion cards |
 | `SettingsController` | `PlayerGui.Settings.Frame` templates | dynamic settings UI, persistence calls, local effects |
 | `TeamVisualsController` | character models | team-colored Highlights |
 | `PromptController` | ProximityPrompts | custom prompt UI |
@@ -29,6 +30,7 @@ Keep UI hierarchy changes and controller changes in the same commit.
 - Menu uses a Scriptable camera pinned to `Workspace.Cam` until Play.
 - Play hides the menu, returns camera to `Custom`, and sends `PlayGameEvent` after a 0.6-second transition.
 - Return-to-menu calls the server first, then restores the menu camera/UI.
+- `MenuReturnLocked` blocks the return action only while the server is admitting and placing the player into a round. The button briefly reads `Round Starting` instead of beginning or completing the countdown.
 - The in-round HUD is mostly controlled by `InMenu`, `IsPlaying`, and round update events.
 - The top scoreboard refreshes once per second and displays up to eight active entries.
 

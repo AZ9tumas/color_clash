@@ -202,6 +202,7 @@ local function startRoundLoop()
 					and (not mode.TeamBased or table.find(RoundConfig.TeamNames, team) ~= nil)
 
 				if eligible then
+					player:SetAttribute("MenuReturnLocked", true)
 					table.insert(waiting, { player = player, team = team })
 				end
 			end
@@ -209,12 +210,15 @@ local function startRoundLoop()
 			local claimed = {}
 			for _, entry in waiting do
 				local player = entry.player
-				local landed = placeOnMap(player, gameSpawn, claimed)
-				if landed then table.insert(claimed, landed) end
+				if player.Parent == Players and player:GetAttribute("InMenu") == false then
+					local landed = placeOnMap(player, gameSpawn, claimed)
+					if landed then table.insert(claimed, landed) end
 
-				player:SetAttribute("IsPlaying", true)
-				QuestServer.UpdateGamesPlayed(player)
-				if mode.TeamBased then roster[player] = entry.team end
+					player:SetAttribute("IsPlaying", true)
+					QuestServer.UpdateGamesPlayed(player)
+					if mode.TeamBased then roster[player] = entry.team end
+				end
+				if player.Parent == Players then player:SetAttribute("MenuReturnLocked", nil) end
 			end
 			SpectateMechanic.Refresh()
 
@@ -357,6 +361,7 @@ end
 function RoundServer.Init()
 	Players.PlayerAdded:Connect(function(player)
 		if player:GetAttribute("InMenu") == nil then player:SetAttribute("InMenu", true) end
+		player:SetAttribute("MenuReturnLocked", nil)
 		if player.Character then task.spawn(bindCharacter, player, player.Character) end
 		player.CharacterAdded:Connect(function(char) bindCharacter(player, char) end)
 	end)
@@ -421,6 +426,7 @@ function RoundServer.Init()
 	end)
 
 	RoundRemotes.GetMainMenuEvent().OnServerEvent:Connect(function(player)
+		if player:GetAttribute("MenuReturnLocked") then return end
 		local lobbySpawn = Workspace:FindFirstChild("Spawnlocation")
 
 		SpectateMechanic.Stop(player)
