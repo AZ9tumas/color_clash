@@ -118,6 +118,7 @@ local function applyBodyVisibility(character, hidden)
 	if not character then return end
 	local tool = character:FindFirstChildOfClass("Tool")
 	local toolData = tool and Items[tool.Name]
+	local gunEquipped = toolData and toolData.MaxAmmo ~= nil
 	local toolVisible = tool ~= nil and not (toolData and toolData.MaxAmmo)
 	for _, part in character:GetDescendants() do
 		if part:IsA("BasePart") or part:IsA("Decal") then
@@ -126,7 +127,7 @@ local function applyBodyVisibility(character, hidden)
 				if hidden then
 					local refName = part:IsA("Decal") and (part.Parent and part.Parent.Name or "") or part.Name
 					if ARM_PARTS[refName] then
-						target = 0
+						target = gunEquipped and 1 or 0
 					elseif tool and part:IsDescendantOf(tool) then
 						target = toolVisible and 0 or 1
 					else
@@ -285,13 +286,18 @@ function rig:_update(dt)
 	local posePitch = self.pitch + self.springPosition.X
 	local heldTool = character:FindFirstChildOfClass("Tool")
 	local heldData = heldTool and Items[heldTool.Name]
-	local hold = heldTool and 1 or 0
+	local heldGun = heldData and heldData.MaxAmmo ~= nil
+	local hold = (heldTool and not heldGun) and 1 or 0
 	local meleeHold = (heldTool and not (heldData and heldData.MaxAmmo)) and 1 or 0
 	for _, entry in posedJointsFor(humanoid) do
 		local joint = findJoint(character, entry[2], entry[1])
 		if joint and not joint:GetAttribute("RigPoseLocked") then
 			local original = saveOriginalC0(joint)
-			if not writeJointC0(joint, original * entry[3](posePitch, hold, meleeHold)) then
+			local target = original
+			if not heldGun or entry[1] == "Neck" then
+				target = original * entry[3](posePitch, hold, meleeHold)
+			end
+			if not writeJointC0(joint, target) then
 				joint:SetAttribute("RigPoseLocked", true)
 			end
 		end

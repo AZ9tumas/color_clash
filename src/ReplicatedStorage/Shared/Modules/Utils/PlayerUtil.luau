@@ -6,6 +6,18 @@ local RagdollHandler = require(Shared.Modules.Utils.RagdollHandler)
 
 local PlayerUtil = {}
 
+function PlayerUtil.MakeToolPhysicsSafe(tool)
+	if not tool then return end
+	for _, item in tool:GetDescendants() do
+		if item:IsA("BasePart") then
+			item.CanCollide = false
+			item.CanTouch = false
+			item.CanQuery = false
+			item.Massless = true
+		end
+	end
+end
+
 function PlayerUtil.GetActivePlayerCount()
 	local count = 0
 	for _, p in Players:GetPlayers() do
@@ -40,7 +52,9 @@ function PlayerUtil.GiveWeapons(player)
 				if name then
 					local tool = weaponsFolder:FindFirstChild(name)
 					if tool and not player.Backpack:FindFirstChild(name) and (not player.Character or not player.Character:FindFirstChild(name)) then
-						tool:Clone().Parent = player.Backpack
+						local clone = tool:Clone()
+						PlayerUtil.MakeToolPhysicsSafe(clone)
+						clone.Parent = player.Backpack
 					end
 				end
 			end

@@ -519,10 +519,11 @@ function MovementClient.Init()
 		if isVaulting then return end
 
 		if isWallClimbing and climbNormal then
+			local jumpNormal = climbNormal
 			stopWallClimb()
 			local jumpOffForce = configVal("WallClimb", "JumpOffForce", 45)
 			local jumpUpForce = configVal("WallClimb", "JumpUpForce", 65)
-			root.AssemblyLinearVelocity = (climbNormal * jumpOffForce) + Vector3.new(0, jumpUpForce, 0)
+			root.AssemblyLinearVelocity = (jumpNormal * jumpOffForce) + Vector3.new(0, jumpUpForce, 0)
 			beginAirMomentum(Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude)
 			lastWallJumpTime = tick()
 			jumpsLeft = 1

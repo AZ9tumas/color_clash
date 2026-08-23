@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Items = require(Shared.Modules.Core.Items)
 local FXConfig = require(Shared.Modules.Core.FXConfig)
+local PlayerUtil = require(Shared.Modules.Utils.PlayerUtil)
 local GunHandler = require(Shared.Classes.GunHandler)
 local MeleeHandler = require(Shared.Classes.MeleeHandler)
 
@@ -46,6 +47,7 @@ local function setup(tool)
 	local data = weaponDataFor(tool)
 	if not data then return end
 	if gunControllers[tool] then return end
+	PlayerUtil.MakeToolPhysicsSafe(tool)
 
 	local factory = data.MaxAmmo and GunHandler.New or MeleeHandler.New
 	local ok, controller = pcall(factory, tool)

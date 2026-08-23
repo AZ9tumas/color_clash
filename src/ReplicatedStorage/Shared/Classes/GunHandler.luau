@@ -31,6 +31,7 @@ local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
 local ToolConnections = CombatRemotes.GetToolConnections()
+local ShootingAnimation = Shared.Assets.Animations:WaitForChild("Shooting")
 
 function GunHandler.New(tool)
 	if not tool then return nil end
@@ -64,13 +65,36 @@ function GunHandler.New(tool)
 	return self
 end
 
-local function loadTrack(humanoid, animId, priority)
-	local anim = Instance.new("Animation")
-	anim.AnimationId = animId
-	local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
-	local track = animator:LoadAnimation(anim)
+local function loadTrack(animator, animationSource, priority)
+	local animation = animationSource
+	if type(animationSource) == "string" then
+		animation = Instance.new("Animation")
+		animation.AnimationId = animationSource
+	end
+	if not animator or not animation or not animation:IsA("Animation") then return nil end
+	local track = animator:LoadAnimation(animation)
 	track.Priority = priority
 	return track
+end
+
+local function loadGunTracks(target, animator, anims)
+	if not animator then return end
+	target.Hold = loadTrack(animator, ShootingAnimation, Enum.AnimationPriority.Action4)
+	if target.Hold then
+		target.Hold.Looped = true
+		target.Hold:Play(0.1)
+	end
+	if anims and anims.Idle then
+		target.Idle = loadTrack(animator, anims.Idle, Enum.AnimationPriority.Action3)
+		if target.Idle then target.Idle.Looped = true end
+	end
+	if anims and anims.Walk then
+		target.Walk = loadTrack(animator, anims.Walk, Enum.AnimationPriority.Action3)
+		if target.Walk then target.Walk.Looped = true end
+	end
+	if anims and anims.Shoot then
+		target.Shoot = loadTrack(animator, anims.Shoot, Enum.AnimationPriority.Action4)
+	end
 end
 
 local function playHandleSound(tool, name)
@@ -273,7 +297,7 @@ function gun:Equip()
 	self.viewmodel = Viewmodel.GetShared(viewmodelConfig)
 
 	if self.viewmodel then
-		if not self.viewmodel:SetWeapon(self.tool.Name, viewmodelConfig) then
+		if not self.viewmodel:SetWeapon(self.tool.Name, viewmodelConfig, self.tool) then
 			warn(string.format("[Gun] %q has no authored rig - the viewmodel keeps empty hands", self.tool.Name))
 		end
 	else
@@ -285,21 +309,13 @@ function gun:Equip()
 
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local animator = self.viewmodel and self.viewmodel:GetAnimator()
+		or (humanoid and humanoid:FindFirstChildOfClass("Animator"))
 	local anims = self.Properties.Animations
 
-	if humanoid and anims then
+	if animator then
 		local ok, err = pcall(function()
-			if anims.Idle then
-				self.tracks.Idle = loadTrack(humanoid, anims.Idle, Enum.AnimationPriority.Action3)
-				self.tracks.Idle.Looped = true
-			end
-			if anims.Walk then
-				self.tracks.Walk = loadTrack(humanoid, anims.Walk, Enum.AnimationPriority.Action3)
-				self.tracks.Walk.Looped = true
-			end
-			if anims.Shoot then
-				self.tracks.Shoot = loadTrack(humanoid, anims.Shoot, Enum.AnimationPriority.Action4)
-			end
+			loadGunTracks(self.tracks, animator, anims)
 		end)
 		if not ok then
 			warn(string.format("[Gun] animations failed for %q: %s", self.tool.Name, tostring(err)))
@@ -330,11 +346,6 @@ function gun:Unequip()
 	self:stopShoot()
 	self:stopADS()
 
-	if self.viewmodel then
-		self.viewmodel:ClearWeapon()
-		self.viewmodel = nil
-	end
-
 	if self.moveAnimConn then
 		self.moveAnimConn:Disconnect()
 		self.moveAnimConn = nil
@@ -345,6 +356,11 @@ function gun:Unequip()
 	table.clear(self.tracks)
 	self.activeMoveTrack = nil
 	self.currentMoveAnim = nil
+
+	if self.viewmodel then
+		self.viewmodel:ClearWeapon()
+		self.viewmodel = nil
+	end
 
 	CrosshairController.SetCrosshairVisible(false)
 	MainHudController.SetWeaponInfo("N/A", "N/A")
