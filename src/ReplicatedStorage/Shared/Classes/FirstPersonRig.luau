@@ -133,8 +133,10 @@ local function applyBodyVisibility(character, hidden)
 	if not character then return end
 	local tool = character:FindFirstChildOfClass("Tool")
 	local toolData = tool and Items[tool.Name]
-	local gunEquipped = toolData and toolData.MaxAmmo ~= nil
-	local toolVisible = tool ~= nil and not (toolData and toolData.MaxAmmo)
+	-- Catalogued weapons are rendered by the shared camera viewmodel. Keep the
+	-- real character arms and Tool hidden for both guns and melee weapons so the
+	-- legacy first-person representation cannot overlap the viewmodel clone.
+	local viewmodelOwnsWeapon = toolData ~= nil
 	for _, part in character:GetDescendants() do
 		if part:IsA("BasePart") or part:IsA("Decal") then
 			if not part:FindFirstAncestor(VIEWMODEL_WEAPON_NAME) then
@@ -142,9 +144,9 @@ local function applyBodyVisibility(character, hidden)
 				if hidden then
 					local refName = part:IsA("Decal") and (part.Parent and part.Parent.Name or "") or part.Name
 					if ARM_PARTS[refName] then
-						target = gunEquipped and 1 or 0
+						target = viewmodelOwnsWeapon and 1 or 0
 					elseif tool and part:IsDescendantOf(tool) then
-						target = toolVisible and 0 or 1
+						target = viewmodelOwnsWeapon and 1 or 0
 					else
 						target = 1
 					end

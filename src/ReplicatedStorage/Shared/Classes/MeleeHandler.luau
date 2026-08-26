@@ -125,9 +125,9 @@ end
 function melee:Equip()
 	self.isEquipped = true
 
-	self.viewmodel = Viewmodel.GetShared(self.Properties.Viewmodel)
+	self.viewmodel = Viewmodel.GetShared()
 	if self.viewmodel then
-		self.viewmodel:SetWeapon(self.tool.Name, self.Properties.Viewmodel, self.tool)
+		self.viewmodel:SetWeapon(self.tool.Name, nil, self.tool)
 	end
 
 	MainHudController.SetWeaponInfo(self.tool.Name, "N/A")

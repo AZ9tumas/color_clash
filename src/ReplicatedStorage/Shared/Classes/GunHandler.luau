@@ -32,7 +32,6 @@ local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 
 local ToolConnections = CombatRemotes.GetToolConnections()
-local ShootingAnimation = Shared.Assets.Animations:WaitForChild("Shooting")
 
 function GunHandler.New(tool: Tool?)
 	if not tool then return nil end
@@ -58,45 +57,9 @@ function GunHandler.New(tool: Tool?)
 		viewmodel = nil,
 		continuousFireConn = nil,
 
-		tracks = {} :: Types.AnimationTrackSet,
-		activeMoveTrack = nil,
-		currentMoveAnim = nil,
-		moveAnimConn = nil,
 	}, gun)
 
 	return self
-end
-
-local function loadTrack(animator, animationSource, priority)
-	local animation = animationSource
-	if type(animationSource) == "string" then
-		animation = Instance.new("Animation")
-		animation.AnimationId = animationSource
-	end
-	if not animator or not animation or not animation:IsA("Animation") then return nil end
-	local track = animator:LoadAnimation(animation)
-	track.Priority = priority
-	return track
-end
-
-local function loadGunTracks(target, animator, anims)
-	if not animator then return end
-	target.Hold = loadTrack(animator, ShootingAnimation, Enum.AnimationPriority.Action4)
-	if target.Hold then
-		target.Hold.Looped = true
-		target.Hold:Play(0.1)
-	end
-	if anims and anims.Idle then
-		target.Idle = loadTrack(animator, anims.Idle, Enum.AnimationPriority.Action3)
-		if target.Idle then target.Idle.Looped = true end
-	end
-	if anims and anims.Walk then
-		target.Walk = loadTrack(animator, anims.Walk, Enum.AnimationPriority.Action3)
-		if target.Walk then target.Walk.Looped = true end
-	end
-	if anims and anims.Shoot then
-		target.Shoot = loadTrack(animator, anims.Shoot, Enum.AnimationPriority.Action4)
-	end
 end
 
 local function playHandleSound(tool, name)
@@ -172,8 +135,6 @@ function gun:_fireOnce()
 	end
 	FXUtil.MuzzleFlash(muzzlePos, 0.8 + intensity * 0.35)
 	FXUtil.EjectShell(muzzlePos, camera.CFrame.RightVector)
-
-	if self.tracks.Shoot then self.tracks.Shoot:Play(0.05) end
 
 	ToolConnections:FireServer(self.tool.Name, self:getTargetPosition(), self.isAiming)
 	return true
@@ -295,11 +256,10 @@ function gun:Equip()
 	self.isEquipped = true
 	self.cancelReload = false
 
-	local viewmodelConfig = self.Properties.Viewmodel
-	self.viewmodel = Viewmodel.GetShared(viewmodelConfig)
+	self.viewmodel = Viewmodel.GetShared()
 
 	if self.viewmodel then
-		if not self.viewmodel:SetWeapon(self.tool.Name, viewmodelConfig, self.tool) then
+		if not self.viewmodel:SetWeapon(self.tool.Name, nil, self.tool) then
 			warn(string.format("[Gun] %q has no authored rig - the viewmodel keeps empty hands", self.tool.Name))
 		end
 	else
@@ -309,35 +269,6 @@ function gun:Equip()
 	self:updateUI()
 	CrosshairController.SetCrosshairVisible(true)
 
-	-- Never fall back to the real character Animator for gun tracks. Several
-	-- current weapon assets contain root and lower-body poses.
-	local animator = self.viewmodel and self.viewmodel:GetAnimator()
-	local anims = self.Properties.Animations
-
-	if animator then
-		local ok, err = pcall(function()
-			loadGunTracks(self.tracks, animator, anims)
-		end)
-		if not ok then
-			warn(string.format("[Gun] animations failed for %q: %s", self.tool.Name, tostring(err)))
-		end
-	end
-
-	self.moveAnimConn = RunService.Heartbeat:Connect(function()
-		local char = player.Character
-		local root = char and char:FindFirstChild("HumanoidRootPart")
-		if not root or not self.isEquipped then return end
-
-		local flatSpeed = Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude
-		local desired = flatSpeed > 0.5 and "Walk" or "Idle"
-
-		if self.currentMoveAnim ~= desired then
-			self.currentMoveAnim = desired
-			if self.activeMoveTrack then self.activeMoveTrack:Stop(0.2) end
-			self.activeMoveTrack = self.tracks[desired] or self.tracks.Idle
-			if self.activeMoveTrack then self.activeMoveTrack:Play(0.2) end
-		end
-	end)
 end
 
 function gun:Unequip()
@@ -346,17 +277,6 @@ function gun:Unequip()
 
 	self:stopShoot()
 	self:stopADS()
-
-	if self.moveAnimConn then
-		self.moveAnimConn:Disconnect()
-		self.moveAnimConn = nil
-	end
-	for _, track in pairs(self.tracks) do
-		track:Stop(0.15)
-	end
-	table.clear(self.tracks)
-	self.activeMoveTrack = nil
-	self.currentMoveAnim = nil
 
 	if self.viewmodel then
 		self.viewmodel:ClearWeapon()

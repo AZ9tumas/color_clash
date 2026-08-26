@@ -1,24 +1,11 @@
 --!strict
--- Regenerates the reference viewmodel rig from the gunsystem place into
--- src/ReplicatedStorage/Viewmodel.rbxm, so Rojo mounts it at ReplicatedStorage.Viewmodel.
---
--- This rig is the thing the fsafs rigs are not: it was authored FOR A CAMERA. Its arm and
--- its gun slot sit where they belong in front of an eye, which is why the weapon lands in
--- frame with no guessed offsets. The fsafs rigs are standing R6 characters with the gun at
--- hip height - their poses are body-relative and there is no camera offset that rescues
--- them.
---
--- A LEFT ARM is added here, mirrored from the authored right one, because the shipped rig
--- has a single arm and a viewmodel wants two hands on the weapon. Mirroring is done on the
--- joint, not the mesh: the C0/C1 translation is negated in X and the basis is flipped, which
--- puts the second arm at the matching position on the other side of the view.
---
--- Re-run only if the reference place changes:  lune run extract_reference_viewmodel
+-- Regenerates the exact viewmodel template used by the standalone Place 1 lab.
+-- Re-run with: lune run extract_reference_viewmodel
 local fs = require("@lune/fs")
 local roblox = require("@lune/roblox")
 
 local SOURCE = "/Users/az9umas/Desktop/gunsystem/gunsystem.rbxl"
-local OUTPUT = "src/ReplicatedStorage/Viewmodel.rbxm"
+local OUTPUT = "src/ReplicatedStorage/Shared/Assets/Viewmodel.rbxm"
 
 assert(fs.isFile(SOURCE), "reference place not found at " .. SOURCE)
 
@@ -27,62 +14,67 @@ local source = place:GetService("ReplicatedStorage"):FindFirstChild("Viewmodel")
 assert(source, "no ReplicatedStorage.Viewmodel in the reference place")
 
 local rig = source:Clone()
+rig.Name = "Viewmodel"
 
 local root = rig:FindFirstChild("HumanoidRootPart")
-assert(root, "reference viewmodel has no HumanoidRootPart")
-rig.PrimaryPart = root
-
 local rightArm = rig:FindFirstChild("RightArm")
-assert(rightArm, "reference viewmodel has no RightArm")
+local humanoid = rig:FindFirstChildOfClass("Humanoid")
+assert(root and root:IsA("BasePart"), "reference viewmodel has no HumanoidRootPart")
+assert(rightArm and rightArm:IsA("BasePart"), "reference viewmodel has no RightArm")
+assert(humanoid, "reference viewmodel has no Humanoid")
 
 local rightJoint = nil
 for _, descendant in rig:GetDescendants() do
 	if descendant.ClassName == "Motor6D" and descendant.Part1 == rightArm then
 		rightJoint = descendant
+		break
 	end
 end
 assert(rightJoint, "the RightArm is not jointed to the rig")
 
--- Mirror the arm across the view's X axis. Negating the X column and the X translation
--- reflects the placement without turning the part inside out.
-local function mirrorX(cf)
-	local x, y, z,
-		r00, r01, r02,
-		r10, r11, r12,
-		r20, r21, r22 = cf:GetComponents()
-	return roblox.CFrame.new(
-		-x, y, z,
-		r00, -r01, -r02,
-		-r10, r11, r12,
-		-r20, r21, r22
-	)
-end
+rightArm.Name = "Right Arm"
+rightJoint.Name = "Right Arm"
+rightJoint.C0 = roblox.CFrame.new(
+	1.44986093044281, -1.2223740816116333, -2.9548890590667725,
+	0, -1.7484555314695172e-7, -1,
+	1, 0, 0,
+	0, -1, 1.7484555314695172e-7
+)
+rightJoint.C1 = roblox.CFrame.new(-0.13000071048736572, 1.358698844909668, 0.060881614685058594)
+rightArm.CFrame = root.CFrame * rightJoint.C0 * rightJoint.C1:Inverse()
 
 local leftArm = rightArm:Clone()
-leftArm.Name = "LeftArm"
+leftArm.Name = "Left Arm"
 leftArm.Parent = rig
 
 local leftJoint = roblox.Instance.new("Motor6D")
-leftJoint.Name = "LeftArm"
+leftJoint.Name = "Left Arm"
 leftJoint.Part0 = root
 leftJoint.Part1 = leftArm
-leftJoint.C0 = mirrorX(rightJoint.C0)
-leftJoint.C1 = mirrorX(rightJoint.C1)
+leftJoint.C0 = rightJoint.C0
+leftJoint.C1 = roblox.CFrame.new(
+	-0.13000071048736572, 1.3586993217468262, -2.9391181468963623,
+	1, 0, 0,
+	0, 1, -1.7484555314695172e-7,
+	0, 1.7484555314695172e-7, 1
+)
 leftJoint.Parent = root
+leftArm.CFrame = root.CFrame * leftJoint.C0 * leftJoint.C1:Inverse()
 
--- Nothing in this rig may touch the physics world. The root is anchored and everything else
--- hangs off it through Motor6Ds; a Humanoid is deliberately absent, because with one present
--- the engine re-enables CanCollide on the torso and the rig shoves the player around.
-for _, descendant in rig:GetDescendants() do
-	if descendant.ClassName == "Humanoid" or descendant.ClassName == "Animator" then
-		descendant:Destroy()
-	end
+root.Transparency = 0.5
+root.Anchored = true
+
+humanoid.EvaluateStateMachine = false
+humanoid.AutoRotate = false
+humanoid.BreakJointsOnDeath = false
+humanoid.RequiresNeck = false
+humanoid.DisplayDistanceType = roblox.Enum.HumanoidDisplayDistanceType.None
+
+local animator = humanoid:FindFirstChildOfClass("Animator")
+if not animator then
+	animator = roblox.Instance.new("Animator")
+	animator.Parent = humanoid
 end
-
-local controller = roblox.Instance.new("AnimationController")
-local animator = roblox.Instance.new("Animator")
-animator.Parent = controller
-controller.Parent = rig
 
 for _, descendant in rig:GetDescendants() do
 	if descendant:IsA("BasePart") then
@@ -90,22 +82,11 @@ for _, descendant in rig:GetDescendants() do
 		descendant.CanQuery = false
 		descendant.CanTouch = false
 		descendant.Massless = true
-		descendant.CastShadow = false
-		descendant.Anchored = descendant.Name == "HumanoidRootPart"
+		descendant.Anchored = descendant == root
 	end
 end
 
+rig.PrimaryPart = root
 fs.writeFile(OUTPUT, roblox.serializeModel({ rig }))
 
-print("Regenerated reference viewmodel -> " .. OUTPUT)
-print("  PrimaryPart: " .. rig.PrimaryPart.Name)
-for _, descendant in rig:GetDescendants() do
-	if descendant:IsA("BasePart") then
-		print(string.format("  part  %-18s size=%s transparency=%.1f anchored=%s",
-			descendant.Name, tostring(descendant.Size), descendant.Transparency, tostring(descendant.Anchored)))
-	elseif descendant.ClassName == "Motor6D" then
-		print(string.format("  joint %-18s %s -> %s", descendant.Name,
-			descendant.Part0 and descendant.Part0.Name or "nil",
-			descendant.Part1 and descendant.Part1.Name or "nil (free gun slot)"))
-	end
-end
+print("Regenerated Place 1 viewmodel -> " .. OUTPUT)
