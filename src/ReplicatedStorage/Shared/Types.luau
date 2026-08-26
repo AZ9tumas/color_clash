@@ -32,7 +32,7 @@ export type AimConfig = {
 }
 
 export type ViewmodelConfig = {
-	Offset: Vector3?,
+	GripOffset: CFrame?,
 }
 
 export type WeaponDefinition = {

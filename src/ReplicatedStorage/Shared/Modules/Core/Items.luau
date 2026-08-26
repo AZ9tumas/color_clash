@@ -110,8 +110,8 @@ local Items: Types.WeaponCatalog = {
 		Aim = { FOV = 65, SpreadMultiplier = 0.4 },
 
 		Viewmodel = {
-
-			Offset = Vector3.zero,
+			-- Position (studs), then rotation (pitch, yaw, roll).
+			GripOffset = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(0), math.rad(0), math.rad(0)),
 		},
 		Animations = { Shoot = "rbxassetid://86304083830215", Reload = "rbxassetid://84055323674335", Idle = "rbxassetid://76788131144151", Walk = "rbxassetid://74737589673617", Sprint = "rbxassetid://74737589673617" }
 	},
@@ -123,8 +123,7 @@ local Items: Types.WeaponCatalog = {
 		Aim = { FOV = 30, SpreadMultiplier = 0.1 },
 
 		Viewmodel = {
-
-			Offset = Vector3.zero,
+			GripOffset = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(0), math.rad(0), math.rad(0)),
 		},
 		Animations = { Shoot = "rbxassetid://101828241949203", Reload = "rbxassetid://93766855465736", Idle = "rbxassetid://98715180840350", Walk = "rbxassetid://133471749603993", Sprint = "rbxassetid://133471749603993" }
 	},
@@ -136,8 +135,7 @@ local Items: Types.WeaponCatalog = {
 		Aim = { FOV = 55, SpreadMultiplier = 0.45 },
 
 		Viewmodel = {
-
-			Offset = Vector3.zero,
+			GripOffset = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(0), math.rad(0), math.rad(0)),
 		},
 		Animations = { Shoot = "rbxassetid://98842943786422", Reload = "rbxassetid://70986236399168", Idle = "rbxassetid://127694603378551", Walk = "rbxassetid://116073209021469", Sprint = "rbxassetid://116073209021469" }
 	},
@@ -149,8 +147,7 @@ local Items: Types.WeaponCatalog = {
 		Aim = { FOV = 58, SpreadMultiplier = 0.5 },
 
 		Viewmodel = {
-
-			Offset = Vector3.zero,
+			GripOffset = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(0), math.rad(0), math.rad(0)),
 		},
 		Animations = { Shoot = "rbxassetid://93777660426232", Reload = "rbxassetid://116733200772749", Idle = "rbxassetid://124267210387896", Walk = "rbxassetid://128330126585616", Sprint = "rbxassetid://128330126585616" }
 	},
@@ -162,8 +159,7 @@ local Items: Types.WeaponCatalog = {
 		Aim = { FOV = 55, SpreadMultiplier = 0.4 },
 
 		Viewmodel = {
-
-			Offset = Vector3.zero,
+			GripOffset = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(0), math.rad(0), math.rad(0)),
 		},
 		Animations = { Shoot = "rbxassetid://133379495548916", Reload = "rbxassetid://116854355282803", Idle = "rbxassetid://127694603378551", Walk = "rbxassetid://116073209021469", Sprint = "rbxassetid://116073209021469" }
 	},
@@ -175,8 +171,7 @@ local Items: Types.WeaponCatalog = {
 		Aim = { FOV = 62, SpreadMultiplier = 0.6 },
 
 		Viewmodel = {
-
-			Offset = Vector3.zero,
+			GripOffset = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(0), math.rad(0), math.rad(0)),
 		},
 		Animations = { Shoot = "rbxassetid://140337976272295", Reload = "rbxassetid://84283526160957", Idle = "rbxassetid://128036426437584", Walk = "rbxassetid://113147747937745", Sprint = "rbxassetid://113147747937745" }
 	}

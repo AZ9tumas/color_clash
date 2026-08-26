@@ -31,7 +31,10 @@ Example shape:
     Shake = { Intensity = 0.8, Decay = 12 },
     Recoil = { Pitch = 2.8, Yaw = 0.9 },
     Aim = { FOV = 55, SpreadMultiplier = 0.45 },
-    Viewmodel = { Offset = Vector3.zero },
+    Viewmodel = {
+        GripOffset = CFrame.new(0, 0, 0)
+            * CFrame.Angles(math.rad(0), math.rad(0), math.rad(0)),
+    },
     Animations = {
         Shoot = "rbxassetid://00000000000000",
         Reload = "rbxassetid://00000000000000",
@@ -53,7 +56,9 @@ Example shape:
 
 ## Author weapon viewmodel data
 
-The camera clones visual geometry from the equipped Tool and uses `Items.Grip` through a standard `RightGrip` Motor6D. Use a Tool Grip Editor against an R6 preview or live character, then paste its CFrame output into the item’s `Grip` field. Do not create a viewmodel-only weapon offset. The global `CAMERA_ROOT_OFFSET` in `Viewmodel.luau` moves the entire arms-and-weapon assembly and must not be used to correct one weapon.
+The camera clones visual geometry from the equipped Tool and uses `Items.Grip` through a standard `RightGrip` Motor6D. Use a Tool Grip Editor against an R6 preview or live character, then paste its CFrame output into the item’s `Grip` field.
+
+For a correction that should affect only first person, tune that weapon's `Viewmodel.GripOffset` in `Items.luau`. It is multiplied after the Tool grip. Use `CFrame.new(x, y, z)` for position in studs and `CFrame.Angles(math.rad(pitch), math.rad(yaw), math.rad(roll))` for orientation in degrees. Leave it as the identity values when no correction is needed. The global `CAMERA_ROOT_OFFSET` in `Viewmodel.luau` moves the entire arms-and-weapon assembly and must not be used to correct one weapon.
 
 Create or edit `ReplicatedStorage.WeaponViewmodelData/<WeaponName>` in Studio with:
 

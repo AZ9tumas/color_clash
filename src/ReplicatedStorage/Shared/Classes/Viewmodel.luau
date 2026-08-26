@@ -588,6 +588,9 @@ function Viewmodel:SetWeapon(weaponName: string, config: Types.ViewmodelConfig?,
 	end
 
 	local gripC0, gripC1 = gripFrames(sourceTool, self.sourceRightArm)
+	-- Per-weapon first-person correction, applied after the Tool's authored
+	-- grip. Configure this in Items.<weapon>.Viewmodel.GripOffset.
+	gripC0 = gripC0 * ((config and config.GripOffset) or CFrame.identity)
 	local desiredHandleCFrame = self.rightArm.CFrame * gripC0 * gripC1:Inverse()
 	local rightGrip = Instance.new("Motor6D")
 	rightGrip.Name = "RightGrip"
