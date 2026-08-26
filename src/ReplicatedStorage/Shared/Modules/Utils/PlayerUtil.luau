@@ -2,11 +2,13 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
+local Types = require(Shared.Types)
+local Items: Types.WeaponCatalog = require(Shared.Modules.Core.Items)
 local RagdollHandler = require(Shared.Modules.Utils.RagdollHandler)
 
 local PlayerUtil = {}
 
-function PlayerUtil.MakeToolPhysicsSafe(tool)
+function PlayerUtil.MakeToolPhysicsSafe(tool: Tool?)
 	if not tool then return end
 	for _, item in tool:GetDescendants() do
 		if item:IsA("BasePart") then
@@ -26,7 +28,7 @@ function PlayerUtil.GetActivePlayerCount()
 	return count
 end
 
-function PlayerUtil.RemoveWeapons(player)
+function PlayerUtil.RemoveWeapons(player: Player)
 	if player.Character then
 		local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
 		if humanoid then humanoid:UnequipTools() end
@@ -35,7 +37,7 @@ function PlayerUtil.RemoveWeapons(player)
 	for _, item in player.Backpack:GetChildren() do if item:IsA("Tool") then item:Destroy() end end
 end
 
-function PlayerUtil.GiveWeapons(player)
+function PlayerUtil.GiveWeapons(player: Player)
 	local assetsFolder = Shared:FindFirstChild("Assets")
 	local weaponsFolder = assetsFolder and assetsFolder:FindFirstChild("Weapons")
 	if not weaponsFolder then return end
@@ -48,11 +50,13 @@ function PlayerUtil.GiveWeapons(player)
 			local mainWep = profile.Data.Equipped.Main
 			local meleeWep = profile.Data.Equipped.Melee
 
-			local function giveTool(name)
+			local function giveTool(name: string?)
 				if name then
 					local tool = weaponsFolder:FindFirstChild(name)
-					if tool and not player.Backpack:FindFirstChild(name) and (not player.Character or not player.Character:FindFirstChild(name)) then
+					if tool and tool:IsA("Tool") and not player.Backpack:FindFirstChild(name) and (not player.Character or not player.Character:FindFirstChild(name)) then
 						local clone = tool:Clone()
+						local data = Items[name]
+						if data and typeof(data.Grip) == "CFrame" then clone.Grip = data.Grip end
 						PlayerUtil.MakeToolPhysicsSafe(clone)
 						clone.Parent = player.Backpack
 					end

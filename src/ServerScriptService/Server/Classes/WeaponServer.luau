@@ -154,13 +154,8 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming)
 	local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)
 	if not handle then return end
 
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid and data.Animations and data.Animations.Shoot then
-		local anim = Instance.new("Animation")
-		anim.AnimationId = data.Animations.Shoot
-		local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
-		animator:LoadAnimation(anim):Play()
-	end
+	-- The local camera viewmodel owns gun animation. The current published gun
+	-- tracks contain full-body/root poses and must not run on the real Humanoid.
 	if handle:FindFirstChild("FireSFX") then handle.FireSFX:Play() end
 
 	local origin = FXUtil.GetMuzzlePosition(tool) or handle.Position

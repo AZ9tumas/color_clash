@@ -5,7 +5,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HapticService = game:GetService("HapticService")
 
 local Shared = ReplicatedStorage.Shared
-local Items = require(Shared.Modules.Core.Items)
+local Types = require(Shared.Types)
+local Items: Types.WeaponCatalog = require(Shared.Modules.Core.Items)
 local CombatRemotes = require(Shared.Remotes.CombatRemotes)
 local RaycastUtil = require(Shared.Modules.Utils.RaycastUtil)
 local CameraFX = require(Shared.Modules.Utils.CameraFX)
@@ -51,7 +52,7 @@ local function loadTrack(humanoid, animId, priority)
 	return track
 end
 
-function MeleeHandler.New(tool)
+function MeleeHandler.New(tool: Tool?)
 	if not tool then return nil end
 	local data = Items[tool.Name]
 	if not data or data.MaxAmmo then return nil end
@@ -63,7 +64,7 @@ function MeleeHandler.New(tool)
 		lastSwing = 0,
 		rig = FirstPersonRig.GetShared(),
 		viewmodel = nil,
-		tracks = {},
+		tracks = {} :: Types.AnimationTrackSet,
 		activeMoveTrack = nil,
 		currentMoveAnim = nil,
 		moveAnimConn = nil,

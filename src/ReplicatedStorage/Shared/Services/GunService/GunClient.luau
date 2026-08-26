@@ -3,7 +3,8 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
-local Items = require(Shared.Modules.Core.Items)
+local Types = require(Shared.Types)
+local Items: Types.WeaponCatalog = require(Shared.Modules.Core.Items)
 local FXConfig = require(Shared.Modules.Core.FXConfig)
 local PlayerUtil = require(Shared.Modules.Utils.PlayerUtil)
 local GunHandler = require(Shared.Classes.GunHandler)
@@ -19,15 +20,14 @@ local GunClient = {}
 
 local player = Players.LocalPlayer
 
-local gunControllers = {}
-local currentlyEquippedGun = nil
+local gunControllers: { [Tool]: Types.WeaponController } = {}
+local currentlyEquippedGun: Types.WeaponController? = nil
 
-local function weaponDataFor(tool)
-	if not tool:IsA("Tool") then return nil end
+local function weaponDataFor(tool: Tool): Types.WeaponDefinition?
 	return Items[tool.Name]
 end
 
-local function teardown(tool)
+local function teardown(tool: Tool)
 	local controller = gunControllers[tool]
 	if not controller then return end
 
@@ -43,17 +43,21 @@ local function teardown(tool)
 	log("teardown %s (tool destroyed or removed)", tool.Name)
 end
 
-local function setup(tool)
+local function setup(instance: Instance)
+	if not instance:IsA("Tool") then return end
+	local tool = instance
 	local data = weaponDataFor(tool)
 	if not data then return end
 	if gunControllers[tool] then return end
+	if typeof(data.Grip) == "CFrame" then tool.Grip = data.Grip end
 	PlayerUtil.MakeToolPhysicsSafe(tool)
 
 	local factory = data.MaxAmmo and GunHandler.New or MeleeHandler.New
-	local ok, controller = pcall(factory, tool)
+	local ok, result = pcall(factory, tool)
+	local controller = result :: Types.WeaponController?
 	if not ok or not controller then
 		if not ok then
-			warn(string.format("[Gun] setup failed for %q: %s", tool.Name, tostring(controller)))
+			warn(string.format("[Gun] setup failed for %q: %s", tool.Name, tostring(result)))
 		end
 		return
 	end
@@ -97,7 +101,7 @@ local function setup(tool)
 	refreshEquipState()
 end
 
-local function watchContainer(container)
+local function watchContainer(container: Instance)
 	for _, tool in container:GetChildren() do
 		setup(tool)
 	end
@@ -133,7 +137,7 @@ function GunClient.Init()
 		end
 	end)
 
-	local function onCharacterAdded(character)
+	local function onCharacterAdded(character: Model)
 		watchContainer(character)
 		local backpack = player:WaitForChild("Backpack", 5)
 		if backpack then watchContainer(backpack) end

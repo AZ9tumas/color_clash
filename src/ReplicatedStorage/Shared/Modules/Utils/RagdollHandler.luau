@@ -4,6 +4,8 @@ local MovementConfig = require(ReplicatedStorage.Shared.Modules.Core.MovementCon
 
 local rh = {}
 
+local savedPhysics = setmetatable({}, { __mode = "k" })
+
 local function createCollider(part)
 	local collider = Instance.new("Part")
 	collider.Name = "RagdollCollider"
@@ -29,6 +31,18 @@ function rh.apply(char, duration, kbVelocity)
 	if char:GetAttribute("Ragdolled") then return end
 
 	char:SetAttribute("Ragdolled", true)
+
+	local physicsState = {}
+	for _, part in char:GetDescendants() do
+		if part:IsA("BasePart") then
+			physicsState[part] = {
+				CanCollide = part.CanCollide,
+				Massless = part.Massless,
+				CustomPhysicalProperties = part.CustomPhysicalProperties,
+			}
+		end
+	end
+	savedPhysics[char] = physicsState
 
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	local isDead = hum and hum.Health <= 0
@@ -129,11 +143,7 @@ function rh.remove(char)
 		end)
 	end
 
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		hrp.CanCollide = true
-		hrp.Massless = false
-	end
+	local physicsState = savedPhysics[char]
 
 	for _, pt in ipairs(char:GetDescendants()) do
 		if pt.Name == "rdSock" or pt.Name == "rdA0" or pt.Name == "rdA1" or pt.Name == "RagdollCollider" then
@@ -143,9 +153,20 @@ function rh.remove(char)
 			pt.Enabled = true
 		end
 		if pt:IsA("BasePart") then
-			pt.CustomPhysicalProperties = nil
+			local original = physicsState and physicsState[pt]
+			if original then
+				pt.CanCollide = original.CanCollide
+				pt.Massless = original.Massless
+				pt.CustomPhysicalProperties = original.CustomPhysicalProperties
+			elseif pt.Name == "HumanoidRootPart" then
+				pt.CanCollide = false
+				pt.Massless = false
+				pt.CustomPhysicalProperties = nil
+			end
 		end
 	end
+
+	savedPhysics[char] = nil
 end
 
 return rh

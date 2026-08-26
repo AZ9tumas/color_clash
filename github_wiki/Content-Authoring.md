@@ -5,10 +5,10 @@
 A ranged weapon is identified by the presence of `MaxAmmo` in `Items`.
 
 1. Choose a stable exact name.
-2. Add a complete entry to `Items` with damage, cooldown, range, ammo, reload, spread, recoil, aim, and animation fields.
+2. Add a complete entry to `Items` with damage, cooldown, grip, range, ammo, reload, spread, recoil, aim, and animation fields.
 3. Use full `rbxassetid://...` strings for every animation ID.
 4. Add a matching `Tool` under `ReplicatedStorage.Shared.Assets.Weapons`.
-5. Ensure the Tool has `Handle` or another discoverable BasePart.
+5. Ensure the Tool has exactly one direct BasePart named `Handle`.
 6. Add `FireSFX` and `ReloadSFX` beneath the handle when applicable.
 7. Add a `MuzzlePoint`/`Muzzle` Attachment or a BasePart whose name contains `muzzle`.
 8. Add the same exact name to `ShopConfig.Categories.Weapons` with `Subcategory = "Ranged"` if purchasable.
@@ -27,6 +27,7 @@ Example shape:
     ReloadTime = 1.6,
     Spread = 7,
     AutoFire = true,
+    Grip = CFrame.new(),
     Shake = { Intensity = 0.8, Decay = 12 },
     Recoil = { Pitch = 2.8, Yaw = 0.9 },
     Aim = { FOV = 55, SpreadMultiplier = 0.45 },
@@ -44,7 +45,7 @@ Example shape:
 ## Add a melee weapon
 
 1. Add an `Items` entry without `MaxAmmo`.
-2. Include damage, cooldown, shake, and `Animations.Swing.R6/R15` plus idle/walk/sprint.
+2. Include damage, cooldown, grip, shake, and `Animations.Swing.R6/R15` plus idle/walk/sprint.
 3. Add a matching Tool to `Shared.Assets.Weapons`.
 4. Add it to `ShopConfig` with `Subcategory = "Melee"` if purchasable.
 5. Decide its sound family. Names containing `Axe` or `Bat` use those families; all others use default unless code is extended.
@@ -52,15 +53,17 @@ Example shape:
 
 ## Author weapon viewmodel data
 
+The camera clones visual geometry from the equipped Tool and uses `Items.Grip` through a standard `RightGrip` Motor6D. Use a Tool Grip Editor against an R6 preview or live character, then paste its CFrame output into the item’s `Grip` field. Do not create a viewmodel-only weapon offset. The global `CAMERA_ROOT_OFFSET` in `Viewmodel.luau` moves the entire arms-and-weapon assembly and must not be used to correct one weapon.
+
 Create or edit `ReplicatedStorage.WeaponViewmodelData/<WeaponName>` in Studio with:
 
-- `WeaponModel` containing a resolvable `Handle`;
+- `WeaponModel` containing a resolvable `Handle` and any reload-only parts absent from the Tool;
 - `Joints` configs with `Part0`, `Part1`, `C0`, and `C1` attributes;
 - `Hold` KeyframeSequence;
 - `Reload` KeyframeSequence;
 - optional `ReloadLength` numeric attribute.
 
-Names are normalized for trailing spaces and case during model-part lookup, but folder names still need to match the item name. Prefer exact names to avoid ambiguity.
+Names are normalized for trailing spaces and case during model-part lookup, but folder names still need to match the item name. Runtime supplements only missing `Joints` targets from `WeaponModel`; all other visual geometry comes from the Tool. Prefer exact names to avoid ambiguity.
 
 When complete:
 

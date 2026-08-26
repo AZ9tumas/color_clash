@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
 
 local Shared = ReplicatedStorage.Shared
+local Types = require(Shared.Types)
 local FXConfig = require(Shared.Modules.Core.FXConfig)
 
 local function log(message, ...)
@@ -29,8 +30,9 @@ local MUZZLE_DECAY = 14
 
 local VIEWMODEL_MODEL_NAME = "FirstPersonViewmodel"
 local WEAPON_MODEL_NAME = "ViewmodelWeapon"
-local MOUNT_PART_NAME = "RightHandGunMount"
-local MOUNT_PART_SIZE = Vector3.new(0.05, 0.05, 0.05)
+local DEFAULT_R6_GRIP_C0 = CFrame.new(0, -1, 0, 1, 0, 0, 0, 0, 1, 0, -1, 0)
+local CAMERA_ROOT_OFFSET = CFrame.new(0, -2, -2.25)
+-- CFrame.new(-0.0213599205, -1.33662224, -1.63064575) --ignore this but do not remove
 
 local APPEARANCE_CLASSES = {
 	BodyColors = true,
@@ -43,11 +45,13 @@ local bindSerial = 0
 local shared = nil
 local registeredReloads = {}
 
-local function makeInert(instance)
-	local function apply(part)
+local function makeInert(instance: Instance)
+	local function apply(part: BasePart)
 		part.CanCollide = false
+		part.CanTouch = false
+		part.CanQuery = false
 		part.Massless = true
-
+		part.CastShadow = false
 		part.Anchored = false
 	end
 	if instance:IsA("BasePart") then apply(instance) end
@@ -56,11 +60,11 @@ local function makeInert(instance)
 	end
 end
 
-local function normalize(name)
+local function normalize(name: string): string
 	return string.lower((string.gsub(name, "%s+$", "")))
 end
 
-local function findPartNamed(model, name)
+local function findPartNamed(model: Instance, name: string): BasePart?
 	local exact = model:FindFirstChild(name, true)
 	if exact and exact:IsA("BasePart") then return exact end
 	local wanted = normalize(name)
@@ -72,19 +76,78 @@ local function findPartNamed(model, name)
 	return nil
 end
 
-local function weaponDataFolder(weaponName)
+local function removeVisualBehavior(instance: Instance)
+	for _, descendant in instance:GetDescendants() do
+		if descendant:IsA("LuaSourceContainer") or descendant:IsA("JointInstance") or descendant:IsA("Constraint") or descendant:IsA("WeldConstraint") then
+			descendant:Destroy()
+		end
+	end
+end
+
+local function cloneToolVisual(tool: Tool): Model
+	local sourceClone = tool:Clone()
+	removeVisualBehavior(sourceClone)
+	local model = Instance.new("Model")
+	model.Name = WEAPON_MODEL_NAME
+	for _, child in sourceClone:GetChildren() do
+		child.Parent = model
+	end
+	sourceClone:Destroy()
+	makeInert(model)
+	return model
+end
+
+local function addMissingAuthoredParts(model: Model, folder: Instance?, handle: BasePart)
+	local authoredModel = folder and folder:FindFirstChild("WeaponModel")
+	local authoredHandle = authoredModel and findPartNamed(authoredModel, "Handle")
+	local joints = folder and folder:FindFirstChild("Joints")
+	if not authoredModel or not authoredHandle or not joints then return end
+
+	for _, jointConfig in joints:GetChildren() do
+		local partName = jointConfig:GetAttribute("Part1") or jointConfig.Name
+		if normalize(partName) ~= "handle" and not findPartNamed(model, partName) then
+			local sourcePart = findPartNamed(authoredModel, partName)
+			if sourcePart then
+				local clone = sourcePart:Clone()
+				removeVisualBehavior(clone)
+				makeInert(clone)
+				clone.CFrame = handle.CFrame * authoredHandle.CFrame:ToObjectSpace(sourcePart.CFrame)
+				clone.Parent = model
+			end
+		end
+	end
+end
+
+local function weaponDataFolder(weaponName: string): Instance?
 	local dataRoot = ReplicatedStorage:FindFirstChild("WeaponViewmodelData")
 	return dataRoot and dataRoot:FindFirstChild(weaponName)
 end
 
-local function equippedTool(weaponName)
+local function equippedTool(weaponName: string): Tool?
 	local character = player.Character
 	local tool = character and character:FindFirstChild(weaponName)
 	if tool and tool:IsA("Tool") then return tool end
 	return nil
 end
 
-local function cloneRigPart(sourcePart)
+local function gripFrames(tool: Tool?, sourceArm: BasePart?): (CFrame, CFrame)
+	local handle = tool and tool:FindFirstChild("Handle")
+	if handle and sourceArm then
+		for _, joint in sourceArm:GetDescendants() do
+			if joint:IsA("JointInstance") and joint.Name == "RightGrip" and joint.Part1 == handle then
+				return joint.C0, joint.C1
+			end
+		end
+	end
+
+	local grip = tool and tool.Grip or CFrame.identity
+	if handle and sourceArm and handle:IsDescendantOf(Workspace) and sourceArm:IsDescendantOf(Workspace) then
+		return sourceArm.CFrame:ToObjectSpace(handle.CFrame) * grip, grip
+	end
+	return DEFAULT_R6_GRIP_C0, grip
+end
+
+local function cloneRigPart(sourcePart: BasePart): BasePart
 	local clone = sourcePart:Clone()
 	for _, descendant in clone:GetDescendants() do
 		if descendant:IsA("JointInstance") or descendant:IsA("LuaSourceContainer") then
@@ -96,7 +159,7 @@ local function cloneRigPart(sourcePart)
 	return clone
 end
 
-local function sourceMotor(character, part0, part1)
+local function sourceMotor(character: Model, part0: BasePart, part1: BasePart): Motor6D?
 	for _, descendant in character:GetDescendants() do
 		if descendant:IsA("Motor6D") and descendant.Part0 == part0 and descendant.Part1 == part1 then
 			return descendant
@@ -105,49 +168,23 @@ local function sourceMotor(character, part0, part1)
 	return nil
 end
 
-local function createArmMotor(root, arm, name)
+local function createArmMotor(root: BasePart, arm: BasePart, name: string, c0: CFrame, c1: CFrame): Motor6D
 	local motor = Instance.new("Motor6D")
 	motor.Name = name
-	motor.C0 = root.CFrame:ToObjectSpace(arm.CFrame)
-	motor.C1 = CFrame.identity
+	motor.C0 = c0
+	motor.C1 = c1
 	motor.Part0 = root
 	motor.Part1 = arm
 	motor.Parent = root
 	return motor
 end
 
-local function mirrorArmPose(motor, sourceRoot, sourceArm)
-	if not motor or not sourceRoot or not sourceArm then return end
-	local relative = sourceRoot.CFrame:ToObjectSpace(sourceArm.CFrame)
-	motor.Transform = motor.C0:Inverse() * relative * motor.C1
+local function mirrorArmPose(motor: Motor6D?, sourceMotor: Motor6D?, sourceC0: CFrame?)
+	if not motor or not sourceMotor or not sourceC0 then return end
+	motor.Transform = sourceC0:ToObjectSpace(sourceMotor.C0) * sourceMotor.Transform
 end
 
-local function farthestLocalCorner(hand, root)
-	local rootLocal = hand.CFrame:PointToObjectSpace(root.Position)
-	local halfSize = hand.Size * 0.5
-	local bestCorner = Vector3.zero
-	local bestDistanceSquared = -math.huge
-	for _, xSign in { -1, 1 } do
-		for _, ySign in { -1, 1 } do
-			for _, zSign in { -1, 1 } do
-				local corner = Vector3.new(
-					halfSize.X * xSign,
-					halfSize.Y * ySign,
-					halfSize.Z * zSign
-				)
-				local delta = corner - rootLocal
-				local distanceSquared = delta:Dot(delta)
-				if distanceSquared > bestDistanceSquared then
-					bestDistanceSquared = distanceSquared
-					bestCorner = corner
-				end
-			end
-		end
-	end
-	return bestCorner, rootLocal
-end
-
-local function setLocalVisibility(container, value)
+local function setLocalVisibility(container: Instance, value: number)
 	if container:IsA("BasePart") or container:IsA("Decal") then
 		container.LocalTransparencyModifier = value
 	end
@@ -189,7 +226,7 @@ local function loadSequenceTrack(animator, weaponName, cache, sequence, trackNam
 	return track
 end
 
-function Viewmodel.new(config)
+function Viewmodel.new(config: Types.ViewmodelConfig?)
 	return setmetatable({
 		sourceCharacter = nil,
 		model = nil,
@@ -204,17 +241,19 @@ function Viewmodel.new(config)
 		sourceRoot = nil,
 		sourceRightArm = nil,
 		sourceLeftArm = nil,
-		mount = nil,
-		mountLocalPosition = Vector3.zero,
-		rootLocalFromHand = Vector3.zero,
+		sourceRightShoulder = nil,
+		sourceLeftShoulder = nil,
+		sourceRightC0 = nil,
+		sourceLeftC0 = nil,
 		rigVisible = false,
 
 		weaponName = nil,
 		weaponFolder = nil,
 		gunModel = nil,
 		handle = nil,
-		rootFollowerJoints = {},
-		weaponJoints = {},
+		gripMotor = nil,
+		rootFollowerJoints = {} :: { Types.RootFollower },
+		weaponJoints = {} :: { JointInstance },
 		reloadTrack = nil,
 		reloadPoseTrack = nil,
 
@@ -228,11 +267,12 @@ function Viewmodel.new(config)
 		muzzleAlpha = 0,
 
 		bindName = nil,
+		poseConnection = nil,
 		destroyed = false,
 	}, Viewmodel)
 end
 
-function Viewmodel.GetShared(config)
+function Viewmodel.GetShared(config: Types.ViewmodelConfig?)
 	if shared and not shared.destroyed then
 		return shared
 	end
@@ -264,9 +304,10 @@ function Viewmodel:_destroyRig()
 	self.sourceRoot = nil
 	self.sourceRightArm = nil
 	self.sourceLeftArm = nil
-	self.mount = nil
-	self.mountLocalPosition = Vector3.zero
-	self.rootLocalFromHand = Vector3.zero
+	self.sourceRightShoulder = nil
+	self.sourceLeftShoulder = nil
+	self.sourceRightC0 = nil
+	self.sourceLeftC0 = nil
 	self.rigVisible = false
 end
 
@@ -307,56 +348,42 @@ function Viewmodel:_buildRig()
 
 	root.Transparency = 1
 	root.Anchored = true
+	rightArm.CFrame = root.CFrame * sourceRightShoulder.C0 * sourceRightShoulder.C1:Inverse()
+	leftArm.CFrame = root.CFrame * sourceLeftShoulder.C0 * sourceLeftShoulder.C1:Inverse()
 
-	local rightShoulder = createArmMotor(root, rightArm, sourceRightShoulder.Name)
-	local leftShoulder = createArmMotor(root, leftArm, sourceLeftShoulder.Name)
+	local rightShoulder = createArmMotor(root, rightArm, sourceRightShoulder.Name, sourceRightShoulder.C0, sourceRightShoulder.C1)
+	local leftShoulder = createArmMotor(root, leftArm, sourceLeftShoulder.Name, sourceLeftShoulder.C0, sourceLeftShoulder.C1)
 
+	-- CharacterMesh rendering requires a Humanoid, but its normal state machine
+	-- also owns collision state and can turn these camera-following arms back
+	-- into colliders. Disabling evaluation preserves avatar appearance while
+	-- removing Humanoid forces, sensors, collision changes, and state updates.
 	local humanoid = sourceHumanoid:Clone()
 	humanoid.Name = "Humanoid"
+	humanoid.EvaluateStateMachine = false
 	humanoid.AutoRotate = false
 	humanoid.BreakJointsOnDeath = false
 	humanoid.RequiresNeck = false
 	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	local inheritedAnimator = humanoid:FindFirstChildOfClass("Animator")
+	if inheritedAnimator then inheritedAnimator:Destroy() end
 	humanoid.Parent = model
 
-	local animator = humanoid:FindFirstChildOfClass("Animator")
-	if not animator then
-		animator = Instance.new("Animator")
-		animator.Parent = humanoid
-	end
-	local poseAnimator = sourceHumanoid:FindFirstChildOfClass("Animator")
-	if not poseAnimator then
-		poseAnimator = Instance.new("Animator")
-		poseAnimator.Parent = sourceHumanoid
-	end
+	local animator = Instance.new("Animator")
+	animator.Parent = humanoid
+	-- Gun animations must remain on the isolated camera rig. Playing the
+	-- authored full-body tracks on the real Humanoid applies root motion.
+	local poseAnimator = nil
 
 	for _, child in character:GetChildren() do
 		if APPEARANCE_CLASSES[child.ClassName] then
 			child:Clone().Parent = model
 		end
 	end
-
-	local mountLocalPosition, rootLocalFromHand = farthestLocalCorner(rightArm, root)
-	local mount = Instance.new("Part")
-	mount.Name = MOUNT_PART_NAME
-	mount.Size = MOUNT_PART_SIZE
-	mount.Transparency = 0
-	mount.LocalTransparencyModifier = 1
-	mount.CanCollide = false
-	mount.CanQuery = false
-	mount.CanTouch = false
-	mount.CastShadow = false
-	mount.Massless = true
-	mount.Anchored = false
-	mount.CFrame = rightArm.CFrame * CFrame.new(mountLocalPosition)
-	mount.Parent = model
-
-	local mountWeld = Instance.new("WeldConstraint")
-	mountWeld.Name = "HandMountWeld"
-	mountWeld.Part0 = rightArm
-	mountWeld.Part1 = mount
-	mountWeld.Parent = mount
+	-- Reassert the invariant after all Humanoid and appearance instances exist.
+	makeInert(model)
+	root.Anchored = true
 
 	model.PrimaryPart = root
 
@@ -373,19 +400,16 @@ function Viewmodel:_buildRig()
 	self.sourceRoot = sourceRoot
 	self.sourceRightArm = sourceRightArm
 	self.sourceLeftArm = sourceLeftArm
-	self.mount = mount
-	self.mountLocalPosition = mountLocalPosition
-	self.rootLocalFromHand = rootLocalFromHand
+	self.sourceRightShoulder = sourceRightShoulder
+	self.sourceLeftShoulder = sourceLeftShoulder
+	self.sourceRightC0 = sourceRightShoulder.C0
+	self.sourceLeftC0 = sourceLeftShoulder.C0
 	self.rigVisible = false
 
 	setLocalVisibility(rightArm, 1)
 	setLocalVisibility(leftArm, 1)
 
-	log(
-		"built R6 camera rig; root in right-arm space=%s, mount corner=%s",
-		tostring(rootLocalFromHand),
-		tostring(mountLocalPosition)
-	)
+	log("built torso-free R6 camera rig")
 	return true
 end
 
@@ -408,11 +432,7 @@ end
 
 function Viewmodel:GetAnimator()
 	if not self:_ensureRig() then return nil end
-	return self.poseAnimator
-end
-
-function Viewmodel:GetMountData()
-	return self.mountLocalPosition, self.rootLocalFromHand
+	return self.animator
 end
 
 function Viewmodel:ClearWeapon()
@@ -440,6 +460,7 @@ function Viewmodel:ClearWeapon()
 	end
 
 	self.handle = nil
+	self.gripMotor = nil
 	self.weaponName = nil
 	self.weaponFolder = nil
 	self.muzzlePart = nil
@@ -501,49 +522,37 @@ function Viewmodel:_mapToolMuzzle(tool, handle)
 	self:_setupMuzzleLight(attachment)
 end
 
-function Viewmodel:SetWeapon(weaponName, config, tool)
+function Viewmodel:SetWeapon(weaponName: string, config: Types.ViewmodelConfig?, tool: Tool?): boolean
 	self:ClearWeapon()
 	if not self:_ensureRig() then return false end
 
 	self.weaponName = weaponName
 
-	local folder = weaponDataFolder(weaponName)
-	local weaponModel = folder and folder:FindFirstChild("WeaponModel")
-	if not weaponModel then
-		self:_findMuzzle(tool or equippedTool(weaponName))
-		log("%s renders as the held tool", weaponName)
-		return true
+	local sourceTool = tool or equippedTool(weaponName)
+	if not sourceTool or not sourceTool:IsA("Tool") then
+		warn(string.format("[Viewmodel] %s has no equipped Tool visual", weaponName))
+		return false
 	end
-	if not self.mount or not self.root then return false end
 
+	local folder = weaponDataFolder(weaponName)
 	self.weaponFolder = folder
 
-	local gun = weaponModel:Clone()
-	gun.Name = WEAPON_MODEL_NAME
-	makeInert(gun)
-	gun.Parent = self.model
-
-	local boxCFrame, boxSize = gun:GetBoundingBox()
-	local pivotDistance = (gun:GetPivot().Position - boxCFrame.Position).Magnitude
-	if pivotDistance > math.max(10, boxSize.Magnitude * 2) then
-		warn(string.format("[Viewmodel] %s pivot is %.2f studs from its bounds", weaponName, pivotDistance))
-	end
-
-	gun:PivotTo(self.mount.CFrame)
-
+	local gun = cloneToolVisual(sourceTool)
 	local handle = findPartNamed(gun, "Handle")
 	if not handle then
-		warn(string.format("[Viewmodel] %s's weapon model has no Handle", weaponName))
+		warn(string.format("[Viewmodel] %s's Tool visual has no Handle", weaponName))
 		gun:Destroy()
 		return false
 	end
+	addMissingAuthoredParts(gun, folder, handle)
+	gun.Parent = self.model
 
 	self.gunModel = gun
 	self.handle = handle
 
 	local jointed = { [handle] = true }
-	local rootFollowers = {}
-	local joints = folder:FindFirstChild("Joints")
+	local rootFollowers = {} :: { Types.PendingRootFollower }
+	local joints = folder and folder:FindFirstChild("Joints")
 	if joints then
 		for _, jointConfig in joints:GetChildren() do
 			local part1 = findPartNamed(gun, jointConfig:GetAttribute("Part1") or jointConfig.Name)
@@ -578,17 +587,23 @@ function Viewmodel:SetWeapon(weaponName, config, tool)
 		end
 	end
 
-	local gunWeld = Instance.new("WeldConstraint")
-	gunWeld.Name = "GunPivotWeld"
-	gunWeld.Part0 = handle
-	gunWeld.Part1 = self.mount
-	gunWeld.Parent = handle
+	local gripC0, gripC1 = gripFrames(sourceTool, self.sourceRightArm)
+	local desiredHandleCFrame = self.rightArm.CFrame * gripC0 * gripC1:Inverse()
+	local rightGrip = Instance.new("Motor6D")
+	rightGrip.Name = "RightGrip"
+	rightGrip.C0 = gripC0
+	rightGrip.C1 = gripC1
+	rightGrip.Part0 = self.rightArm
+	rightGrip.Part1 = handle
+	rightGrip.Parent = self.rightArm
+	table.insert(self.weaponJoints, rightGrip)
+	self.gripMotor = rightGrip
 
 	for _, follower in rootFollowers do
 		local motor = Instance.new("Motor6D")
 		motor.Name = follower.config.Name
 		motor.C1 = follower.config:GetAttribute("C1") or CFrame.identity
-		motor.C0 = self.root.CFrame:ToObjectSpace(handle.CFrame * follower.relative) * motor.C1
+		motor.C0 = self.root.CFrame:ToObjectSpace(desiredHandleCFrame * follower.relative) * motor.C1
 		motor.Part0 = self.root
 		motor.Part1 = follower.part
 		motor.Parent = self.root
@@ -600,12 +615,12 @@ function Viewmodel:SetWeapon(weaponName, config, tool)
 
 	self:_findMuzzle(gun)
 	if not self.muzzlePart then
-		self:_mapToolMuzzle(tool or equippedTool(weaponName), handle)
+		self:_mapToolMuzzle(sourceTool, handle)
 	end
 
 	self:_setRigVisible(true)
 	log(
-		"%s pivot aligned to hand mount; %d root follower(s), %d handle joint(s)",
+		"%s attached from Tool Grip; %d root follower(s), %d visual joint(s)",
 		weaponName,
 		#self.rootFollowerJoints,
 		#self.weaponJoints
@@ -690,6 +705,11 @@ function Viewmodel:StopReload()
 	end
 end
 
+function Viewmodel:_updatePose()
+	mirrorArmPose(self.rightShoulder, self.sourceRightShoulder, self.sourceRightC0)
+	mirrorArmPose(self.leftShoulder, self.sourceLeftShoulder, self.sourceLeftC0)
+end
+
 function Viewmodel:Enable()
 	if self.bindName then return end
 	if not self:_ensureRig() then return end
@@ -697,10 +717,13 @@ function Viewmodel:Enable()
 	local camera = Workspace.CurrentCamera
 	if not camera then return end
 	self.model.Parent = camera
-	self.model:PivotTo(camera.CFrame)
+	self.model:PivotTo(camera.CFrame * CAMERA_ROOT_OFFSET)
 
 	bindSerial += 1
 	self.bindName = "Viewmodel_" .. bindSerial
+	self.poseConnection = RunService.PreSimulation:Connect(function()
+		self:_updatePose()
+	end)
 	RunService:BindToRenderStep(self.bindName, Enum.RenderPriority.Camera.Value + 3, function(dt)
 		self:_update(dt)
 	end)
@@ -729,9 +752,7 @@ function Viewmodel:_update(dt)
 			self.model.Parent = camera
 		end
 		local recoil = CFrame.Angles(self.springPosition.X, self.springPosition.Y, self.springPosition.Z)
-		self.model:PivotTo(camera.CFrame * recoil)
-		mirrorArmPose(self.rightShoulder, self.sourceRoot, self.sourceRightArm)
-		mirrorArmPose(self.leftShoulder, self.sourceRoot, self.sourceLeftArm)
+		self.model:PivotTo(camera.CFrame * CAMERA_ROOT_OFFSET * recoil)
 		self:_applyRigVisibility(owned and self.rigVisible)
 	end
 
@@ -768,6 +789,10 @@ function Viewmodel:Disable()
 	if self.bindName then
 		pcall(RunService.UnbindFromRenderStep, RunService, self.bindName)
 		self.bindName = nil
+	end
+	if self.poseConnection then
+		self.poseConnection:Disconnect()
+		self.poseConnection = nil
 	end
 	if self.model then
 		self:_applyRigVisibility(false)

@@ -55,9 +55,24 @@ local R15_HOLD_ELBOW = math.rad(35)
 local R6_MELEE_HOLD_RIGHT = math.rad(55)
 local R6_MELEE_HOLD_LEFT = math.rad(15)
 
+-- The published Shooting animation contains full-body/root motion, so the
+-- first-person gun pose is applied directly to the shoulder joints instead.
+local R6_GUN_HOLD_RIGHT = CFrame.new(
+	0.916316986, 0.18094188, -0.0853027105,
+	-0.21872443, -0.975766659, -0.00625243597,
+	0.96808511, -0.217797115, 0.123998418,
+	-0.122355267, 0.0210685767, 0.992262721
+)
+local R6_GUN_HOLD_LEFT = CFrame.new(
+	-0.506633699, 0.109606683, -0.708618164,
+	0.428542167, 0.786711931, -0.444338024,
+	-0.28005603, -0.351905227, -0.893157959,
+	-0.859022915, 0.507195234, 0.0695170164
+)
+
 local POSED_JOINTS_R6 = {
-	{ "Right Shoulder", "Torso", function(pitch, hold, meleeHold) return CFrame.Angles(0, 0, pitch + meleeHold * R6_MELEE_HOLD_RIGHT) end },
-	{ "Left Shoulder", "Torso", function(pitch, hold, meleeHold) return CFrame.Angles(0, 0, -(pitch + meleeHold * R6_MELEE_HOLD_LEFT)) end },
+	{ "Right Shoulder", "Torso", function(pitch, hold, meleeHold, gunHold) return gunHold > 0 and R6_GUN_HOLD_RIGHT or CFrame.Angles(0, 0, pitch + meleeHold * R6_MELEE_HOLD_RIGHT) end },
+	{ "Left Shoulder", "Torso", function(pitch, hold, meleeHold, gunHold) return gunHold > 0 and R6_GUN_HOLD_LEFT or CFrame.Angles(0, 0, -(pitch + meleeHold * R6_MELEE_HOLD_LEFT)) end },
 	{ "Neck", "Torso", function(pitch) return CFrame.Angles(-pitch * NECK_PITCH_SCALE, 0, 0) end },
 }
 
@@ -150,6 +165,23 @@ local function sensitivity(aiming)
 		scale = scale * ((type(aim) == "number" and aim or 40) / 50)
 	end
 	return BASE_SENSITIVITY * scale
+end
+
+local function faceRootYaw(root, direction)
+	local flatLook = direction * Vector3.new(1, 0, 1)
+	if flatLook.Magnitude <= 0.001 then return end
+	flatLook = flatLook.Unit
+
+	local currentFlat = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+	if currentFlat.Magnitude > 0.001 and currentFlat.Unit:Dot(flatLook) > 0.99999 then
+		return
+	end
+
+	local linearVelocity = root.AssemblyLinearVelocity
+	local angularVelocity = root.AssemblyAngularVelocity
+	root.CFrame = CFrame.lookAlong(root.Position, flatLook)
+	root.AssemblyLinearVelocity = linearVelocity
+	root.AssemblyAngularVelocity = angularVelocity
 end
 
 function handler.new(tool, config)
@@ -277,26 +309,21 @@ function rig:_update(dt)
 
 	if not movementOwnsRotation() then
 		humanoid.AutoRotate = false
-		local flatLook = rotation.LookVector * Vector3.new(1, 0, 1)
-		if flatLook.Magnitude > 0.001 then
-			root.CFrame = CFrame.new(root.Position) * CFrame.lookAlong(Vector3.zero, flatLook.Unit)
-		end
+		faceRootYaw(root, rotation.LookVector)
 	end
 
 	local posePitch = self.pitch + self.springPosition.X
 	local heldTool = character:FindFirstChildOfClass("Tool")
 	local heldData = heldTool and Items[heldTool.Name]
 	local heldGun = heldData and heldData.MaxAmmo ~= nil
-	local hold = (heldTool and not heldGun) and 1 or 0
+	local hold = heldTool and 1 or 0
 	local meleeHold = (heldTool and not (heldData and heldData.MaxAmmo)) and 1 or 0
+	local gunHold = heldGun and 1 or 0
 	for _, entry in posedJointsFor(humanoid) do
 		local joint = findJoint(character, entry[2], entry[1])
 		if joint and not joint:GetAttribute("RigPoseLocked") then
 			local original = saveOriginalC0(joint)
-			local target = original
-			if not heldGun or entry[1] == "Neck" then
-				target = original * entry[3](posePitch, hold, meleeHold)
-			end
+			local target = original * entry[3](posePitch, hold, meleeHold, gunHold)
 			if not writeJointC0(joint, target) then
 				joint:SetAttribute("RigPoseLocked", true)
 			end

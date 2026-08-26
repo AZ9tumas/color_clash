@@ -87,12 +87,15 @@ NPC Models with Humanoids can also receive damage and produce kill rewards, but 
 
 Every `Items` key is the canonical Tool name.
 
+Shared weapon and viewmodel contracts live in `ReplicatedStorage.Shared.Types`. `Items` is declared as a `WeaponCatalog`; weapon consumers use `WeaponDefinition` or the narrowed `GunDefinition`; `GunClient` stores both gun and melee handlers through the `WeaponController` interface. Viewmodel configuration and follower records are defined there as well. When adding a shared field, update `Types.luau` first, then add the field to `Items` and consume it from the handler. The type module returns an empty table at runtime and exists to provide Luau editor completion and static checking without changing gameplay behavior.
+
 Common melee fields:
 
 | Field | Meaning |
 | --- | --- |
 | `Damage` | Damage per successful server overlap |
 | `Cooldown` | Minimum time between accepted swings |
+| `Grip` | Version-controlled standard Roblox Tool grip used by real and camera weapons |
 | `Shake.Intensity`, `Shake.Decay` | Presentation tuning; not all declared decay values are consumed |
 | `Animations.Swing.R6/R15` | Full `rbxassetid://` strings |
 | `Animations.Idle/Walk/Sprint` | Full animation URI strings |

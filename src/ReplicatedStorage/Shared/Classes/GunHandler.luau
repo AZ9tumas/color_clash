@@ -4,7 +4,8 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
-local Items = require(Shared.Modules.Core.Items)
+local Types = require(Shared.Types)
+local Items: Types.WeaponCatalog = require(Shared.Modules.Core.Items)
 local CombatRemotes = require(Shared.Remotes.CombatRemotes)
 local CrosshairController = require(Shared.UIControllers.CrosshairController)
 local MainHudController = require(Shared.UIControllers.MainHudController)
@@ -33,17 +34,18 @@ local camera = Workspace.CurrentCamera
 local ToolConnections = CombatRemotes.GetToolConnections()
 local ShootingAnimation = Shared.Assets.Animations:WaitForChild("Shooting")
 
-function GunHandler.New(tool)
+function GunHandler.New(tool: Tool?)
 	if not tool then return nil end
 	local data = Items[tool.Name]
 	if not data or not data.MaxAmmo then return nil end
 
+	local gunData = data :: Types.GunDefinition
 	local self = setmetatable({
 		tool = tool,
-		Properties = data,
+		Properties = gunData,
 
-		_ammo = data.MaxAmmo,
-		fireRate = data.Cooldown,
+		_ammo = gunData.MaxAmmo,
+		fireRate = gunData.Cooldown,
 		fireCooldown = 0,
 
 		isEquipped = false,
@@ -56,7 +58,7 @@ function GunHandler.New(tool)
 		viewmodel = nil,
 		continuousFireConn = nil,
 
-		tracks = {},
+		tracks = {} :: Types.AnimationTrackSet,
 		activeMoveTrack = nil,
 		currentMoveAnim = nil,
 		moveAnimConn = nil,
@@ -307,10 +309,9 @@ function gun:Equip()
 	self:updateUI()
 	CrosshairController.SetCrosshairVisible(true)
 
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	-- Never fall back to the real character Animator for gun tracks. Several
+	-- current weapon assets contain root and lower-body poses.
 	local animator = self.viewmodel and self.viewmodel:GetAnimator()
-		or (humanoid and humanoid:FindFirstChildOfClass("Animator"))
 	local anims = self.Properties.Animations
 
 	if animator then
