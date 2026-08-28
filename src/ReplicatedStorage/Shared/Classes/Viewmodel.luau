@@ -43,6 +43,15 @@ function Viewmodel.GetShared()
 	return shared
 end
 
+-- Non-creating accessor. Callers that only want to decorate an existing
+-- viewmodel must not spawn one for a player who is not in first person.
+function Viewmodel.GetExisting()
+	if shared and not shared.destroyed then
+		return shared
+	end
+	return nil
+end
+
 function Viewmodel.ClearShared()
 	if shared then
 		shared:Destroy()
@@ -103,25 +112,21 @@ end
 
 function Viewmodel:GetMuzzlePosition(): Vector3?
 	local controller = self.weaponController
-	local weapon = controller and controller.clonedGun
-	if not weapon then return nil end
-
-	for _, descendant in ipairs(weapon:GetDescendants()) do
-		if descendant:IsA("Attachment")
-			and (descendant.Name == "ProjectileStart" or descendant.Name == "MuzzlePoint" or descendant.Name == "Muzzle") then
-			return descendant.WorldPosition
-		end
-	end
-	for _, descendant in ipairs(weapon:GetDescendants()) do
-		if descendant:IsA("BasePart") and string.find(string.lower(descendant.Name), "muzzle", 1, true) then
-			return descendant.Position
-		end
-	end
-	return nil
+	return controller and controller:GetMuzzlePosition() or nil
 end
 
-function Viewmodel:MuzzleFlash(_scale)
-	-- World muzzle FX are still emitted by GunHandler at GetMuzzlePosition().
+function Viewmodel:GetEjectPosition(): Vector3?
+	local controller = self.weaponController
+	return controller and controller:GetEjectPosition() or nil
+end
+
+-- Emitted on the viewmodel gun itself, so the flash tracks the weapon instead of
+-- being stamped into the world at the position it happened to occupy this frame.
+function Viewmodel:MuzzleFlash(scale: number?)
+	local controller = self.weaponController
+	if controller then
+		controller:MuzzleFlash(scale)
+	end
 end
 
 function Viewmodel:applyRecoilImpulse(impulse: Vector3)

@@ -11,7 +11,7 @@ local CombatServer = {}
 local lastUsed = {}
 
 function CombatServer.Init()
-	CombatRemotes.GetToolConnections().OnServerEvent:Connect(function(player, toolName, mousePos, isAiming)
+	CombatRemotes.GetToolConnections().OnServerEvent:Connect(function(player, toolName, mousePos, isAiming, eyeOrigin)
 		if not player:GetAttribute("IsPlaying") then return end
 
 		if Workspace:GetAttribute("ArenaPhase") ~= "Shoot" then return end
@@ -26,7 +26,7 @@ function CombatServer.Init()
 		lastUsed[player.UserId][toolName] = currentTime
 
 		if data.MaxAmmo then
-			WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming == true)
+			WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming == true, eyeOrigin)
 		else
 			WeaponServer.FireMelee(player, toolName, data)
 		end

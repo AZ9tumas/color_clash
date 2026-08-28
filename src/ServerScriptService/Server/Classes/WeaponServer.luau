@@ -19,6 +19,28 @@ local KillFeedEvent = RoundRemotes.GetKillFeedEvent()
 
 local WeaponServer = {}
 
+-- How far the client-reported eye may sit from the character's head before it is
+-- rejected as bogus and the head is used instead.
+local MAX_EYE_OFFSET = 14
+
+-- Spread is authored in milliradians (Items.Spread), matching the tuning the
+-- previous per-axis jitter produced. Keep the scale so weapon feel is unchanged.
+local SPREAD_TO_RADIANS = 1 / 1000
+
+local function coneDirection(direction, spread)
+	if spread <= 0 then return direction end
+
+	local basis = CFrame.lookAt(Vector3.zero, direction)
+	local theta = math.random() * math.pi * 2
+	local radius = math.tan(spread * SPREAD_TO_RADIANS) * math.sqrt(math.random())
+	local offset = basis.RightVector * (math.cos(theta) * radius)
+		+ basis.UpVector * (math.sin(theta) * radius)
+
+	local jittered = direction + offset
+	if jittered.Magnitude < 1e-4 then return direction end
+	return jittered.Unit
+end
+
 local function announceKill(sourceName, sourcePlayer, victimName, victimPlayer, toolName, isHeadshot, reward)
 	KillFeedEvent:FireAllClients({
 		Killer = sourceName,
@@ -145,10 +167,9 @@ function WeaponServer.FireMelee(player, toolName, data)
 	end
 end
 
-function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming)
+function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming, eyeOrigin)
 	local character = player.Character
-	if not character or not mousePos then return end
-	if typeof(mousePos) ~= "Vector3" then return end
+	if not character or typeof(mousePos) ~= "Vector3" then return end
 	local tool = character:FindFirstChild(toolName)
 	if not tool then return end
 	local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart", true)
@@ -158,7 +179,26 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming)
 	-- tracks contain full-body/root poses and must not run on the real Humanoid.
 	if handle:FindFirstChild("FireSFX") then handle.FireSFX:Play() end
 
-	local origin = FXUtil.GetMuzzlePosition(tool) or handle.Position
+	-- Hit resolution casts from the shooter's eye, reproducing the exact ray the
+	-- crosshair described. Casting from the muzzle instead sits it well below and
+	-- right of the camera, so shots clip cover the player could see past and miss
+	-- targets that were dead centre - even on Pistol and Sniper, which have no
+	-- spread at all. The muzzle stays a purely visual anchor.
+	local head = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
+	local rayOrigin = head and head.Position
+	if typeof(eyeOrigin) == "Vector3" and eyeOrigin == eyeOrigin then
+		if not rayOrigin or (eyeOrigin - rayOrigin).Magnitude <= MAX_EYE_OFFSET then
+			rayOrigin = eyeOrigin
+		end
+	end
+	if not rayOrigin then return end
+
+	local aimDirection = mousePos - rayOrigin
+	if aimDirection.Magnitude < 0.01 then return end
+	aimDirection = aimDirection.Unit
+
+	local visualOrigin = FXUtil.GetMuzzlePosition(tool) or handle.Position
+	local range = data.Range or 1000
 
 	local spread = data.Spread or 0
 	if isAiming and spread > 0 then
@@ -166,17 +206,8 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming)
 		spread = spread * math.clamp(aimMultiplier, 0, 1)
 	end
 
-	for i = 1, data.Pellets or 1 do
-		local direction = (mousePos - origin).Unit
-		local range = data.Range or 1000
-
-		if spread > 0 then
-
-			local function jitter()
-				return (math.random() * 2 - 1) * spread / 1000
-			end
-			direction = (direction + Vector3.new(jitter(), jitter(), jitter())).Unit
-		end
+	for _ = 1, data.Pellets or 1 do
+		local direction = coneDirection(aimDirection, spread)
 
 		local currentIgnore = {character}
 		local debrisFolder = Workspace:FindFirstChild("WallDebrisFolder")
@@ -184,9 +215,9 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming)
 		local baseModel = Workspace:FindFirstChild("Base")
 		if baseModel then table.insert(currentIgnore, baseModel) end
 
-		local result = RaycastUtil.CastWithIgnore(origin, direction, range, currentIgnore, {"RepairP", "Repair"})
+		local result = RaycastUtil.CastWithIgnore(rayOrigin, direction, range, currentIgnore, {"RepairP", "Repair"})
 
-		local visualTarget = origin + (direction * range)
+		local visualTarget = rayOrigin + (direction * range)
 		if result and result.Instance then
 			visualTarget = result.Position
 			local targetChar = result.Instance:FindFirstAncestorWhichIsA("Model")
@@ -197,7 +228,12 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming)
 				DamageVFX:FireClient(player, visualTarget, tostring(damage), result.Instance, result.Normal, killed == true)
 			end
 		end
-		ShowBulletTracer:FireAllClients(origin, visualTarget)
+
+		-- The shooter redirects its tracer to its own viewmodel muzzle; everyone
+		-- else sees it leave the third-person weapon.
+		for _, other in ipairs(Players:GetPlayers()) do
+			ShowBulletTracer:FireClient(other, visualOrigin, visualTarget, other == player)
+		end
 	end
 end
 

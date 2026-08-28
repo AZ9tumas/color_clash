@@ -1,6 +1,10 @@
 -- Central configuration for the first-person viewmodel.
 -- Per-Tool reload Animation instances remain on their respective Tool assets.
 return {
+	--[[
+	-- As of now, CFrame.new(0, -1.5, 0) as shown to be the
+	-- perfect offset for the viewmodel (no character meshes).
+	--]]
 	PositionOffset = CFrame.new(0, -1.5, 0), --CFrame.new(-0.0213599205, -1.33662224, -1.63064575), -- CFrame.new(0, -1, -1),
 	SpringsEnabled = false,
 	AnimationsEnabled = true,

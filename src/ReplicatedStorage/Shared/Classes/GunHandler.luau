@@ -76,7 +76,7 @@ function gun:updateUI()
 	MainHudController.SetWeaponInfo(self.tool.Name, tostring(self._ammo) .. "/" .. tostring(self.Properties.MaxAmmo))
 end
 
-function gun:getTargetPosition()
+function gun:getAimRay()
 	local origin = camera.CFrame.Position
 	local direction = camera.CFrame.LookVector
 
@@ -85,7 +85,12 @@ function gun:getTargetPosition()
 	if debrisFolder then table.insert(ignoreList, debrisFolder) end
 
 	local result = RaycastUtil.CastWithIgnore(origin, direction, 1000, ignoreList, {"RepairP", "Repair"})
-	return result and result.Position or origin + direction * 1000
+	return origin, result and result.Position or origin + direction * 1000
+end
+
+function gun:getTargetPosition()
+	local _, target = self:getAimRay()
+	return target
 end
 
 function gun:_fireOnce()
@@ -128,16 +133,23 @@ function gun:_fireOnce()
 	CameraFX.FirePulse((self.Properties.Shake and self.Properties.Shake.Intensity or 1) * 2.5)
 
 	local intensity = self.Properties.Shake and self.Properties.Shake.Intensity or 1
-	local muzzlePos = (self.viewmodel and self.viewmodel:GetMuzzlePosition())
-		or FXUtil.GetMuzzlePosition(self.tool)
 
 	if self.viewmodel then
+		-- The flash lives on the viewmodel gun, so it tracks the weapon rather
+		-- than being stamped into the world where the muzzle was this frame.
 		self.viewmodel:MuzzleFlash(math.clamp(0.75 + intensity * 0.25, 0, 1))
+		FXUtil.EjectShell(self.viewmodel:GetEjectPosition(), camera.CFrame.RightVector)
+	else
+		local toolMuzzle = FXUtil.GetMuzzlePosition(self.tool)
+		FXUtil.MuzzleFlash(toolMuzzle, 0.8 + intensity * 0.35)
+		FXUtil.EjectShell(toolMuzzle, camera.CFrame.RightVector)
 	end
-	FXUtil.MuzzleFlash(muzzlePos, 0.8 + intensity * 0.35)
-	FXUtil.EjectShell(muzzlePos, camera.CFrame.RightVector)
 
-	ToolConnections:FireServer(self.tool.Name, self:getTargetPosition(), self.isAiming)
+	-- The server resolves the hit from this exact ray. Sending the eye origin as
+	-- well as the endpoint keeps its raycast identical to the one the crosshair
+	-- described; casting from the muzzle instead introduces parallax error.
+	local origin, target = self:getAimRay()
+	ToolConnections:FireServer(self.tool.Name, target, self.isAiming, origin)
 	return true
 end
 

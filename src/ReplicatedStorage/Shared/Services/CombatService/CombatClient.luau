@@ -13,6 +13,7 @@ local CrosshairController = require(Shared.UIControllers.CrosshairController)
 local SettingsController = require(Shared.UIControllers.SettingsController)
 local FXUtil = require(Shared.Modules.Utils.FXUtil)
 local CameraFX = require(Shared.Modules.Utils.CameraFX)
+local Viewmodel = require(Shared.Classes.Viewmodel)
 
 local CombatClient = {}
 
@@ -337,31 +338,23 @@ function CombatClient.Init()
 		end
 	end)
 
-	CombatRemotes.GetBulletTracer().OnClientEvent:Connect(function(origin, targetPos)
-		local distance = (targetPos - origin).Magnitude
-		if distance < 0.1 then return end
+	CombatRemotes.GetBulletTracer().OnClientEvent:Connect(function(origin, targetPos, isLocalShot)
+		if typeof(origin) ~= "Vector3" or typeof(targetPos) ~= "Vector3" then return end
 
-		FXUtil.MuzzleFlash(origin)
+		if isLocalShot then
+			-- Our own shot. Start the tracer at the viewmodel muzzle and leave the
+			-- flash to the viewmodel, instead of stamping a second one into the
+			-- world at the third-person weapon behind the camera.
+			local viewmodel = Viewmodel.GetExisting()
+			local muzzle = viewmodel and viewmodel:GetMuzzlePosition()
+			if muzzle then
+				origin = muzzle
+			end
+		else
+			FXUtil.MuzzleFlash(origin)
+		end
 
-		local tracer = Instance.new("Part")
-		tracer.Name = "Tracer"
-		tracer.Anchored = true
-		tracer.CanCollide = false
-		tracer.Material = Enum.Material.Neon
-		tracer.Color = Color3.new(1, 0.9, 0.5)
-		tracer.Transparency = 0.2
-		tracer.Size = Vector3.new(0.1, 0.1, distance)
-		tracer.CFrame = CFrame.lookAt(origin, targetPos) * CFrame.new(0, 0, -distance / 2)
-
-		local debrisFolder = Workspace:FindFirstChild("WallDebrisFolder") or Instance.new("Folder", Workspace)
-		debrisFolder.Name = "WallDebrisFolder"
-		tracer.Parent = debrisFolder
-
-		local tween = TweenService:Create(tracer, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			Transparency = 1, Size = Vector3.new(0, 0, distance)
-		})
-		tween:Play()
-		tween.Completed:Connect(function() tracer:Destroy() end)
+		FXUtil.BulletTracer(origin, targetPos)
 	end)
 
 	RunService.RenderStepped:Connect(function(dt)

@@ -4,6 +4,10 @@ local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
 local gunInfo = require(script.Parent.GunInfo)
 local viewmodelHandler = require(script.Parent.ViewModelHandler)
 local ViewmodelSettings = require(script.Parent.ViewmodelSettings)
+local FXUtil = require(ReplicatedStorage.Shared.Modules.Utils.FXUtil)
+
+local MUZZLE_ATTACHMENT_NAMES = { "ProjectileStart", "MuzzlePoint", "Muzzle" }
+local EJECT_ATTACHMENT_NAMES = { "EjectPort", "ShellEject", "ShellPort" }
 
 local handler = {}
 local gun = {}
@@ -100,6 +104,29 @@ local function stripJoints(model: Instance)
 	end
 end
 
+local function findNamed(model: Instance, names: { string })
+	for _, wanted in ipairs(names) do
+		for _, descendant in ipairs(model:GetDescendants()) do
+			if descendant:IsA("Attachment") and descendant.Name == wanted then
+				return descendant
+			end
+		end
+	end
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") and string.find(string.lower(descendant.Name), "muzzle", 1, true) then
+			return descendant
+		end
+	end
+	return nil
+end
+
+local function worldPositionOf(instance): Vector3?
+	if not instance or not instance.Parent then return nil end
+	if instance:IsA("Attachment") then return instance.WorldPosition end
+	if instance:IsA("BasePart") then return instance.Position end
+	return nil
+end
+
 local function weldRemaining(model: Instance, handle: BasePart, jointed: { [BasePart]: boolean })
 	for _, part in ipairs(model:GetDescendants()) do
 		if part:IsA("BasePart") and part ~= handle and not jointed[part] then
@@ -127,6 +154,9 @@ function handler.New(gunModel: Tool, sharedViewModel)
 		dataFolder = weaponDataFolder(gunModel.Name),
 		tracks = {},
 		createdJoints = {},
+		muzzle = nil,
+		ejectPort = nil,
+		muzzleFX = nil,
 	}
 
 	controllers[newgun] = true
@@ -397,8 +427,36 @@ function gun:Equip()
 		self:_buildGripJoint(self.clonedGun, handle)
 	end
 
+	-- FX anchors live on the cloned gun, so muzzle flash and shell ejection come
+	-- off the weapon the player is actually looking at.
+	self.muzzle = findNamed(self.clonedGun, MUZZLE_ATTACHMENT_NAMES)
+	self.ejectPort = findNamed(self.clonedGun, EJECT_ATTACHMENT_NAMES) or self.muzzle
+	self.muzzleFX = self.muzzle and FXUtil.EnsureMuzzleFX(self.muzzle) or nil
+	if not self.muzzle then
+		warn(string.format("[Viewmodel] %s has no muzzle attachment - FX will fall back to the Handle", self.gunModel.Name))
+	end
+
 	self.viewModel:Enable()
 	self:PlayHoldAnimation()
+end
+
+function gun:GetMuzzlePosition(): Vector3?
+	local position = worldPositionOf(self.muzzle)
+	if position then return position end
+
+	local handle = self.clonedGun and findPartNamed(self.clonedGun, "Handle")
+	if handle then
+		return handle.Position + handle.CFrame.LookVector * (handle.Size.Z / 2)
+	end
+	return nil
+end
+
+function gun:GetEjectPosition(): Vector3?
+	return worldPositionOf(self.ejectPort) or self:GetMuzzlePosition()
+end
+
+function gun:MuzzleFlash(scale: number?)
+	FXUtil.FlashMuzzle(self.muzzleFX, scale)
 end
 
 function gun:Unequip()
@@ -410,6 +468,10 @@ function gun:Unequip()
 		end
 	end
 	table.clear(self.createdJoints)
+
+	self.muzzle = nil
+	self.ejectPort = nil
+	self.muzzleFX = nil
 
 	if self.clonedGun then
 		self.clonedGun:Destroy()

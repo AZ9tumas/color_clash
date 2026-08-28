@@ -113,7 +113,8 @@ function FXUtil.GetMuzzlePosition(tool)
 	local MAX_MUZZLE_OFFSET = 15
 
 	for _, d in tool:GetDescendants() do
-		if d:IsA("Attachment") and (d.Name == "MuzzlePoint" or d.Name == "Muzzle") then
+		if d:IsA("Attachment")
+			and (d.Name == "ProjectileStart" or d.Name == "MuzzlePoint" or d.Name == "Muzzle") then
 			local position = d.WorldPosition
 			if (position - handle.Position).Magnitude <= MAX_MUZZLE_OFFSET then
 				return position
@@ -234,6 +235,94 @@ function FXUtil.MuzzleFlash(position, scale)
 	TweenService:Create(light, info, {Brightness = 0}):Play()
 
 	Debris:AddItem(flash, config.Duration + 0.1)
+end
+
+-- Viewmodel muzzle FX live on the gun itself so they track it every frame.
+-- A world-space part placed at the muzzle's position desyncs immediately, since
+-- the viewmodel is re-pivoted to the camera on every RenderStepped.
+function FXUtil.EnsureMuzzleFX(parent)
+	local config = FXConfig.MuzzleFlash
+	if not config.Enabled or not parent then return nil end
+
+	local existing = parent:FindFirstChild("ViewmodelMuzzleFX")
+	if existing then
+		return { light = existing, emitter = existing:FindFirstChildOfClass("ParticleEmitter") }
+	end
+
+	local light = Instance.new("PointLight")
+	light.Name = "ViewmodelMuzzleFX"
+	light.Color = config.Color
+	light.Range = config.LightRange
+	light.Brightness = 0
+	light.Enabled = true
+
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "Flash"
+	emitter.Color = ColorSequence.new(config.Color)
+	emitter.LightEmission = 1
+	emitter.LightInfluence = 0
+	emitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, config.Size * 1.6),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.1),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Lifetime = NumberRange.new(config.Duration * 0.6, config.Duration)
+	emitter.Speed = NumberRange.new(0, 1)
+	emitter.Rotation = NumberRange.new(0, 360)
+	emitter.SpreadAngle = Vector2.new(12, 12)
+	emitter.Enabled = false
+	emitter.Parent = light
+
+	light.Parent = parent
+	return { light = light, emitter = emitter }
+end
+
+function FXUtil.FlashMuzzle(fx, scale)
+	if not fx or not fx.light or not fx.light.Parent then return end
+	local config = FXConfig.MuzzleFlash
+	scale = scale or 1
+
+	if fx.emitter then
+		fx.emitter:Emit(6)
+	end
+
+	fx.light.Brightness = config.LightBrightness * scale
+	TweenService:Create(
+		fx.light,
+		TweenInfo.new(config.Duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Brightness = 0 }
+	):Play()
+end
+
+function FXUtil.BulletTracer(origin, targetPos)
+	if not origin or not targetPos then return end
+
+	local distance = (targetPos - origin).Magnitude
+	if distance < 0.1 then return end
+
+	local tracer = Instance.new("Part")
+	tracer.Name = "Tracer"
+	tracer.Anchored = true
+	tracer.CanCollide = false
+	tracer.CanQuery = false
+	tracer.CanTouch = false
+	tracer.CastShadow = false
+	tracer.Material = Enum.Material.Neon
+	tracer.Color = Color3.new(1, 0.9, 0.5)
+	tracer.Transparency = 0.2
+	tracer.Size = Vector3.new(0.1, 0.1, distance)
+	tracer.CFrame = CFrame.lookAt(origin, targetPos) * CFrame.new(0, 0, -distance / 2)
+	tracer.Parent = effectsFolder()
+
+	local tween = TweenService:Create(tracer, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Transparency = 1,
+		Size = Vector3.new(0, 0, distance),
+	})
+	tween:Play()
+	tween.Completed:Connect(function() tracer:Destroy() end)
 end
 
 function FXUtil.EjectShell(position, rightVector)
