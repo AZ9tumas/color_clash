@@ -117,6 +117,7 @@ function gun:_fireOnce()
 			recoil.Yaw * 8 * steady * (math.random() * 2 - 1),
 			0
 		))
+		self.viewmodel:PlayShoot()
 	end
 	CameraFX.Recoil(Vector3.new(
 		recoil.Pitch * steady,

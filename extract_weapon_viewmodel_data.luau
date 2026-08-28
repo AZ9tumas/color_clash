@@ -2,7 +2,10 @@ local fs = require("@lune/fs")
 local roblox = require("@lune/roblox")
 
 local PLACE = "color_clash.rbxl"
-local OUTPUT = "src/ReplicatedStorage/WeaponViewmodelData.rbxm"
+-- Kept outside src/ on purpose: anything under src/ is owned by Rojo, so writing this
+-- into src/ReplicatedStorage made the filesystem push a second WeaponViewmodelData
+-- folder alongside the Studio-authored one. Import it into Studio by hand instead.
+local OUTPUT = "WeaponViewmodelData.rbxm"
 
 assert(fs.isFile(PLACE), "place file not found at " .. PLACE)
 

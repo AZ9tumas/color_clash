@@ -1,0 +1,10 @@
+# Derived from default.project.json — never commit it, never let it drift.
+sourcemap.json
+
+# Model exports produced by the lune scripts. Import into Studio by hand;
+# keeping them out of src/ stops Rojo from taking ownership of the instances.
+/Viewmodel.rbxm
+/WeaponViewmodelData.rbxm
+
+*.rbxl.lock
+.DS_Store

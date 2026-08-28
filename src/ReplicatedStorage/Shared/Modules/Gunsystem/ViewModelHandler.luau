@@ -16,6 +16,15 @@ local CHARACTER_MESH_MARKER = "ViewmodelCharacterMesh"
 
 local function stabilizeViewmodel(model)
 	local root = model:WaitForChild("HumanoidRootPart")
+
+	-- The rig is authored by duplicating a character, so it carries the default
+	-- Animate script. It would drive idle/walk tracks against the weapon tracks
+	-- if the model ever lands somewhere a LocalScript runs.
+	local animate = model:FindFirstChild("Animate")
+	if animate then
+		animate:Destroy()
+	end
+
 	for _, descendant in ipairs(model:GetDescendants()) do
 		if descendant:IsA("BasePart") then
 			descendant.Anchored = descendant == root
@@ -81,7 +90,7 @@ function handler.new(_viewmodelOffset: Vector3)
 end
 
 function viewmodel:_ensureBaseAnimation()
-	if not ViewmodelSettings.AnimationsEnabled then
+	if not ViewmodelSettings.AnimationsEnabled or not ViewmodelSettings.BaseAnimationEnabled then
 		return false
 	end
 	if self.baseAnimationTrack and self.baseAnimationTrack.IsPlaying then
@@ -169,24 +178,19 @@ function viewmodel:StopADS()
 	end
 end
 
+function viewmodel:GetAnimator(): Animator?
+	local humanoid = self.model:FindFirstChildOfClass("Humanoid")
+	return humanoid and humanoid:FindFirstChildOfClass("Animator")
+end
+
 function viewmodel:ResetAnimationPose()
-	local root = self.model:FindFirstChild("HumanoidRootPart")
-	if root then
-		local rightArmMotor = root:FindFirstChild("Right Arm")
-		if rightArmMotor and rightArmMotor:IsA("Motor6D") then
-			rightArmMotor.Transform = CFrame.new()
+	-- The rig is a full R6 chain (RootJoint, Right/Left Shoulder) plus whatever
+	-- weapon joints GunHandler built for the equipped Tool, so clear them all
+	-- rather than naming individual motors.
+	for _, descendant in ipairs(self.model:GetDescendants()) do
+		if descendant:IsA("Motor6D") then
+			descendant.Transform = CFrame.new()
 		end
-
-		local leftArmMotor = root:FindFirstChild("Left Arm")
-		if leftArmMotor and leftArmMotor:IsA("Motor6D") then
-			leftArmMotor.Transform = CFrame.new()
-		end
-	end
-
-	local rightArm = self.model:FindFirstChild("Right Arm")
-	local gripMotor = rightArm and rightArm:FindFirstChild("GunGrip")
-	if gripMotor and gripMotor:IsA("Motor6D") then
-		gripMotor.Transform = CFrame.new()
 	end
 end
 

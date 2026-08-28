@@ -139,17 +139,23 @@ function Viewmodel:StopADS()
 	self.renderer:StopADS()
 end
 
-function Viewmodel:PlayReload(_duration): boolean
+function Viewmodel:PlayReload(duration: number?): boolean
 	local controller = self.weaponController
 	if not controller then return false end
-	return controller:PlayReloadAnimation()
+	return controller:PlayReloadAnimation(duration)
 end
 
 function Viewmodel:StopReload()
 	local controller = self.weaponController
 	if controller then
-		controller:_stopAnimation()
+		controller:StopReloadAnimation()
 	end
+end
+
+function Viewmodel:PlayShoot(): boolean
+	local controller = self.weaponController
+	if not controller then return false end
+	return controller:PlayShootAnimation()
 end
 
 function Viewmodel:Enable()

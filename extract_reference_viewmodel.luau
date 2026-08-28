@@ -5,7 +5,11 @@ local fs = require("@lune/fs")
 local roblox = require("@lune/roblox")
 
 local SOURCE = "/Users/az9umas/Desktop/gunsystem/gunsystem.rbxl"
-local OUTPUT = "src/ReplicatedStorage/Shared/Assets/Viewmodel.rbxm"
+-- Kept outside src/ on purpose: anything under src/ is owned by Rojo, and dropping a
+-- Viewmodel.rbxm into src/ReplicatedStorage/Shared/Assets would make the filesystem
+-- overwrite the Studio-authored ReplicatedStorage.Shared.Assets.Viewmodel on sync.
+-- Import this file into Studio by hand when you actually want to replace the rig.
+local OUTPUT = "Viewmodel.rbxm"
 
 assert(fs.isFile(SOURCE), "reference place not found at " .. SOURCE)
 
