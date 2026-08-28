@@ -5,8 +5,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Modules = Shared.Modules.Gunsystem
 local Assets = Shared.Assets
 local SpringHandler = require(Modules.SpringModule)
-
-local Camera = workspace.CurrentCamera
+local ViewmodelSettings = require(Modules.ViewmodelSettings)
 
 local handler = {}
 local viewmodel = {}
@@ -41,6 +40,19 @@ local function stabilizeViewmodel(model)
 	end
 end
 
+local function createOffsetSpring(initialPosition)
+	if ViewmodelSettings.SpringsEnabled then
+		return SpringHandler.new(initialPosition)
+	end
+
+	-- Preserve the renderer interface without starting a Heartbeat connection.
+	return {
+		Position = initialPosition,
+		Target = initialPosition,
+		Destroy = function() end,
+	}
+end
+
 function handler.new(_viewmodelOffset: Vector3)
 	local model = Assets:WaitForChild("Viewmodel"):Clone()
 	stabilizeViewmodel(model)
@@ -48,14 +60,15 @@ function handler.new(_viewmodelOffset: Vector3)
 	local newmodel = {
 		model = model,
 		rbxConn = nil,
+		baseAnimationTrack = nil,
 
 		-- viewmodel recoil
 		springPosition = Vector3.new(),
 		springVelocity = Vector3.new(),
 		isSpringActive = false,
-		viewModel_Offset = _viewmodelOffset,
+		viewModel_Offset = _viewmodelOffset or VIEWMODEL_DEFAULT_POS,
 
-		offsetSpring = SpringHandler.new(_viewmodelOffset or VIEWMODEL_DEFAULT_POS)
+		offsetSpring = createOffsetSpring(_viewmodelOffset or VIEWMODEL_DEFAULT_POS)
 	}
 
 	if not newmodel.model.PrimaryPart then
@@ -67,6 +80,51 @@ function handler.new(_viewmodelOffset: Vector3)
 	return setmetatable(newmodel, {__index = viewmodel})
 end
 
+function viewmodel:_ensureBaseAnimation()
+	if not ViewmodelSettings.AnimationsEnabled then
+		return false
+	end
+	if self.baseAnimationTrack and self.baseAnimationTrack.IsPlaying then
+		return true
+	end
+
+	local humanoid = self.model:FindFirstChildOfClass("Humanoid")
+	local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		warn("[ViewmodelAnimation] Cannot play base animation: no Animator")
+		return false
+	end
+
+	if self.baseAnimationTrack then
+		self.baseAnimationTrack:Destroy()
+		self.baseAnimationTrack = nil
+	end
+
+	local animation = Instance.new("Animation")
+	animation.Name = "ViewmodelBaseAnimation"
+	animation.AnimationId = ViewmodelSettings.AnimationIds.ViewmodelLoad
+	local success, track = pcall(function()
+		return animator:LoadAnimation(animation)
+	end)
+	animation:Destroy()
+
+	if not success then
+		warn("[ViewmodelAnimation] Unable to load base viewmodel animation:", track)
+		return false
+	end
+
+	track.Priority = Enum.AnimationPriority.Idle
+	track.Looped = true
+	track:Play()
+	self.baseAnimationTrack = track
+
+	print(string.format(
+		"[ViewmodelAnimation] Playing persistent base animation | AnimationId=%s",
+		ViewmodelSettings.AnimationIds.ViewmodelLoad
+	))
+	return true
+end
+
 function viewmodel:SyncCharacterMeshes(character)
 	for _, child in ipairs(self.model:GetChildren()) do
 		if child:IsA("CharacterMesh") and child:GetAttribute(CHARACTER_MESH_MARKER) then
@@ -74,6 +132,7 @@ function viewmodel:SyncCharacterMeshes(character)
 		end
 	end
 
+	if not ViewmodelSettings.ShowCharacterMeshes then return end
 	if not character then return end
 
 	for _, child in ipairs(character:GetChildren()) do
@@ -87,6 +146,8 @@ function viewmodel:SyncCharacterMeshes(character)
 end
 
 function viewmodel:applyRecoilImpulse(impulse)
+	if not ViewmodelSettings.SpringsEnabled then return end
+
 	local impRad = Vector3.new(
 		math.rad(impulse.X),
 		math.rad(impulse.Y),
@@ -97,11 +158,15 @@ function viewmodel:applyRecoilImpulse(impulse)
 end
 
 function viewmodel:StartADS(adsOffset)
-	self.offsetSpring.Target = adsOffset
+	if ViewmodelSettings.SpringsEnabled then
+		self.offsetSpring.Target = adsOffset
+	end
 end
 
 function viewmodel:StopADS()
-	self.offsetSpring.Target = self.viewModel_Offset
+	if ViewmodelSettings.SpringsEnabled then
+		self.offsetSpring.Target = self.viewModel_Offset
+	end
 end
 
 function viewmodel:ResetAnimationPose()
@@ -126,36 +191,52 @@ function viewmodel:ResetAnimationPose()
 end
 
 function viewmodel:Enable()
+	if not ViewmodelSettings.AnimationsEnabled and not self.rbxConn then
+		self:ResetAnimationPose()
+	end
+
+	local camera = workspace.CurrentCamera
+	if camera then
+		self.model.Parent = camera
+		self:_ensureBaseAnimation()
+	end
 	if self.rbxConn then return end
 
-	self.model.Parent = Camera
-
 	self.rbxConn = RunService.RenderStepped:Connect(function(dt)
-		local baseCFrame = Camera.CFrame
-		local finalCFrame = baseCFrame
+		camera = workspace.CurrentCamera
+		if not camera then return end
 
-		if self.isSpringActive then
-			local stiffness, damping = 300, 30
-
-			if self.springPosition.Magnitude < 0.001 and self.springVelocity.Magnitude < 0.001 then
-				self.isSpringActive = false
-				self.springPosition = Vector3.new()
-				self.springVelocity = Vector3.new()
-			else
-				local springForce = -stiffness * self.springPosition
-				local dampingForce = -damping * self.springVelocity
-				local totalForce = springForce + dampingForce
-
-				self.springVelocity = self.springVelocity + totalForce * dt
-				self.springPosition = self.springPosition + self.springVelocity * dt
-			end
+		if self.model.Parent ~= camera then
+			self.model.Parent = camera
+			self:_ensureBaseAnimation()
 		end
 
-		local positionalOffset = CFrame.new(self.offsetSpring.Position)
-		local recoilRotation = CFrame.Angles(self.springPosition.X, self.springPosition.Y, self.springPosition.Z)
-		finalCFrame = baseCFrame * positionalOffset * recoilRotation
+		local finalCFrame = camera.CFrame * ViewmodelSettings.PositionOffset
 
-		self.model:SetPrimaryPartCFrame(finalCFrame)
+		if ViewmodelSettings.SpringsEnabled then
+			if self.isSpringActive then
+				local stiffness, damping = 300, 30
+
+				if self.springPosition.Magnitude < 0.001 and self.springVelocity.Magnitude < 0.001 then
+					self.isSpringActive = false
+					self.springPosition = Vector3.new()
+					self.springVelocity = Vector3.new()
+				else
+					local springForce = -stiffness * self.springPosition
+					local dampingForce = -damping * self.springVelocity
+					local totalForce = springForce + dampingForce
+
+					self.springVelocity = self.springVelocity + totalForce * dt
+					self.springPosition = self.springPosition + self.springVelocity * dt
+				end
+			end
+
+			local positionalOffset = CFrame.new(self.offsetSpring.Position)
+			local recoilRotation = CFrame.Angles(self.springPosition.X, self.springPosition.Y, self.springPosition.Z)
+			finalCFrame = finalCFrame * positionalOffset * recoilRotation
+		end
+
+		self.model:PivotTo(finalCFrame)
 	end)
 end
 

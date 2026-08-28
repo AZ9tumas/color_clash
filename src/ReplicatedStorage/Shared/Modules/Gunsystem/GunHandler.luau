@@ -1,5 +1,4 @@
 local gunInfo = require(script.Parent.GunInfo)
-local viewmodelOffsets = require(script.Parent.ViewmodelOffsets)
 local viewmodelHandler = require(script.Parent.ViewModelHandler)
 
 local handler = {}
@@ -9,9 +8,8 @@ local VIEWMODEL_COLLISION_GROUP = "Viewmodel"
 
 function handler.New(gunModel: Tool, sharedViewModel)
 	local info = gunInfo[gunModel.Name]
-	local offset = viewmodelOffsets[gunModel.Name]
-	if not info or not offset then
-		warn("Missing viewmodel metadata or offset for", gunModel.Name)
+	if not info then
+		warn("Missing viewmodel metadata for", gunModel.Name)
 		return nil
 	end
 
@@ -21,7 +19,6 @@ function handler.New(gunModel: Tool, sharedViewModel)
 		viewModel = sharedViewModel or viewmodelHandler.new(Vector3.zero),
 		ownsViewModel = sharedViewModel == nil,
 		Properties = info,
-		ViewmodelOffset = offset,
 		animationTrack = nil,
 	}
 
@@ -130,15 +127,25 @@ function gun:Equip()
 	end
 
 	local rightArm = self.viewModel.model:WaitForChild("Right Arm")
-	local gripMotor = rightArm:FindFirstChildWhichIsA("Motor6D") or Instance.new("Motor6D")
+	local gripAttachment = rightArm:WaitForChild("RightGripAttachment")
+	assert(gripAttachment:IsA("Attachment"), "RightGripAttachment must be an Attachment")
+	local gripInfo = self.Properties.ViewmodelGrip
+	assert(gripInfo, "GunInfo is missing ViewmodelGrip for " .. self.gunModel.Name)
+
+	local gripMotor = rightArm:FindFirstChild("GunGrip")
+	if gripMotor and not gripMotor:IsA("Motor6D") then
+		gripMotor:Destroy()
+		gripMotor = nil
+	end
+	gripMotor = gripMotor or Instance.new("Motor6D")
 	gripMotor.Name = "GunGrip"
 	gripMotor.Part0 = rightArm
 	gripMotor.Part1 = self.clonedGun.Handle
-	gripMotor.C0 = CFrame.new(0, 0, 0) * CFrame.Angles(0, 0, 0)
-	gripMotor.C1 = self.ViewmodelOffset.Position * self.ViewmodelOffset.Angles
+	gripMotor.C0 = gripAttachment.CFrame * gripInfo.Position * gripInfo.Orientation
+	gripMotor.C1 = CFrame.new(0, 0, 0)
 	gripMotor.Parent = rightArm
-	
-	print("Final offset for", self.gunModel.Name, gripMotor.C1)
+
+	print("GunGrip attached at RightGripAttachment for", self.gunModel.Name, gripMotor.C0)
 
 	self.viewModel:Enable()
 end

@@ -45,7 +45,19 @@ rightArm.CFrame = root.CFrame * rightJoint.C0 * rightJoint.C1:Inverse()
 
 local leftArm = rightArm:Clone()
 leftArm.Name = "Left Arm"
+local mirroredGripAttachment = leftArm:FindFirstChild("RightGripAttachment")
+if mirroredGripAttachment then
+	mirroredGripAttachment:Destroy()
+end
 leftArm.Parent = rig
+
+local rightGripAttachment = rightArm:FindFirstChild("RightGripAttachment")
+if not rightGripAttachment then
+	rightGripAttachment = roblox.Instance.new("Attachment")
+	rightGripAttachment.Name = "RightGripAttachment"
+	rightGripAttachment.Parent = rightArm
+end
+rightGripAttachment.CFrame = roblox.CFrame.new(0, -1, 0)
 
 local leftJoint = roblox.Instance.new("Motor6D")
 leftJoint.Name = "Left Arm"
