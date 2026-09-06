@@ -9,6 +9,19 @@ local FXUtil = require(ReplicatedStorage.Shared.Modules.Utils.FXUtil)
 local MUZZLE_ATTACHMENT_NAMES = { "ProjectileStart", "MuzzlePoint", "Muzzle" }
 local EJECT_ATTACHMENT_NAMES = { "EjectPort", "ShellEject", "ShellPort" }
 
+-- AnimationTrack:Destroy() does NOT stop playback, and destroying straight after
+-- Stop() cancels the fade - the track then plays forever on the shared Animator.
+-- That is how two ViewmodelHold tracks used to end up blended together after a
+-- weapon swap, skewing the whole rig. Let the fade finish before destroying.
+local function releaseTrack(track: AnimationTrack?, fade: number?)
+	if not track then return end
+	local fadeTime = fade or 0.1
+	track:Stop(fadeTime)
+	task.delay(fadeTime + 0.05, function()
+		track:Destroy()
+	end)
+end
+
 local handler = {}
 local gun = {}
 local controllers = setmetatable({}, {__mode = "k"})
@@ -94,14 +107,33 @@ local function makeInert(model: Instance)
 	end
 end
 
--- The Tool ships welded together. Rebuilding connectivity from scratch is the
--- only way the authored per-part joints can move independently of the Handle.
-local function stripJoints(model: Instance)
+local function constraintParts(instance)
+	if instance:IsA("WeldConstraint") or instance:IsA("JointInstance") then
+		return instance.Part0, instance.Part1
+	end
+	return nil, nil
+end
+
+-- A part driven by an authored Motor6D must not also be rigidly welded to the
+-- Handle, or the reload cannot move it. Those welds are DISABLED, never destroyed:
+-- the weapon keeps every weld it shipped with, and re-enabling one is a single
+-- property. Welds that touch nothing motorised are left completely alone.
+local function disableConflictingWelds(model: Instance, motorised: { [BasePart]: boolean }, handle: BasePart)
+	local disabled = 0
+	if disabled == 0 then return disabled end
+
 	for _, descendant in ipairs(model:GetDescendants()) do
-		if descendant:IsA("JointInstance") or descendant:IsA("WeldConstraint") then
-			descendant:Destroy()
+		local p0, p1 = constraintParts(descendant)
+		if (p0 or p1) and descendant.Enabled then
+			local conflicts = (p0 and p0 ~= handle and motorised[p0])
+				or (p1 and p1 ~= handle and motorised[p1])
+			if conflicts then
+				descendant.Enabled = false
+				disabled += 1
+			end
 		end
 	end
+	return disabled
 end
 
 local function findNamed(model: Instance, names: { string })
@@ -127,15 +159,34 @@ local function worldPositionOf(instance): Vector3?
 	return nil
 end
 
-local function weldRemaining(model: Instance, handle: BasePart, jointed: { [BasePart]: boolean })
+-- Anything left with no working constraint would float free, so it gets welded to
+-- the Handle. Parts the Tool already welds are skipped: we add, never replace.
+local function connectLooseParts(model: Instance, handle: BasePart, motorised: { [BasePart]: boolean })
+	if true then return 0 end
+	local constrained = { [handle] = true }
+	for part in pairs(motorised) do constrained[part] = true end
+
+	for _, descendant in ipairs(model:GetDescendants()) do
+		local p0, p1 = constraintParts(descendant)
+		if (p0 or p1) and descendant.Enabled then
+			if p0 then constrained[p0] = true end
+			if p1 then constrained[p1] = true end
+		end
+	end
+
+	local added = 0
 	for _, part in ipairs(model:GetDescendants()) do
-		if part:IsA("BasePart") and part ~= handle and not jointed[part] then
+		if part:IsA("BasePart") and not constrained[part] then
 			local weld = Instance.new("WeldConstraint")
+			weld.Name = "ViewmodelWeld"
 			weld.Part0 = handle
 			weld.Part1 = part
 			weld.Parent = handle
+			constrained[part] = true
+			added += 1
 		end
 	end
+	return added
 end
 
 function handler.New(gunModel: Tool, sharedViewModel)
@@ -204,6 +255,10 @@ function gun:_holdSource()
 	if animation and animation:IsA("Animation") and animation.AnimationId ~= "" then
 		return animation
 	end
+
+	-- Melee now carries its own Handle-hold id (GunInfo.MELEE_HOLD_ANIMATION_ID)
+	-- rather than the rifle-shaped WeaponAction one, so this fallback is correct
+	-- for both weapon types.
 	return self.Properties.HoldAnimationId
 end
 
@@ -311,8 +366,7 @@ end
 
 function gun:_clearTracks()
 	for name, track in pairs(self.tracks) do
-		track:Stop(0.08)
-		track:Destroy()
+		releaseTrack(track, 0.08)
 		self.tracks[name] = nil
 	end
 	self.viewModel:ResetAnimationPose()
@@ -322,8 +376,10 @@ function gun:_buildAuthoredJoints(model: Instance, root: BasePart, handle: BaseP
 	local joints = self.dataFolder and self.dataFolder:FindFirstChild("Joints")
 	if not joints then return false end
 
-	local jointed = {}
-	local built = {}
+	-- Resolve every config before touching the model, so a weapon that turns out to
+	-- have no Handle joint is abandoned without anything having been changed.
+	local plan = {}
+	local motorised = {}
 
 	for _, config in ipairs(joints:GetChildren()) do
 		local part1 = findPartNamed(model, config:GetAttribute("Part1") or config.Name)
@@ -335,32 +391,13 @@ function gun:_buildAuthoredJoints(model: Instance, root: BasePart, handle: BaseP
 			part1 = nil
 		end
 
-		if part1 and not jointed[part1] then
-			local motor = Instance.new("Motor6D")
-			motor.Name = config.Name
-			motor.C0 = config:GetAttribute("C0") or CFrame.new()
-			motor.C1 = config:GetAttribute("C1") or CFrame.new()
-			motor.Part1 = part1
-
-			-- Root-anchored joints are what the reload sequence drives directly;
-			-- everything else hangs off the Handle.
-			if toRoot then
-				motor.Part0 = root
-				motor.Parent = root
-			else
-				motor.Part0 = handle
-				motor.Parent = handle
-			end
-
-			jointed[part1] = true
-			table.insert(built, motor)
+		if part1 and not motorised[part1] then
+			motorised[part1] = true
+			table.insert(plan, { config = config, part1 = part1, toRoot = toRoot })
 		end
 	end
 
-	if not jointed[handle] then
-		for _, motor in ipairs(built) do
-			motor:Destroy()
-		end
+	if not motorised[handle] then
 		warn(string.format(
 			"[Viewmodel] %s has no authored Handle joint - falling back to the grip attachment",
 			self.gunModel.Name
@@ -368,15 +405,37 @@ function gun:_buildAuthoredJoints(model: Instance, root: BasePart, handle: BaseP
 		return false
 	end
 
-	weldRemaining(model, handle, jointed)
-	for _, motor in ipairs(built) do
+	local disabled = disableConflictingWelds(model, motorised, handle)
+
+	for _, entry in ipairs(plan) do
+		local config = entry.config
+		local motor = Instance.new("Motor6D")
+		motor.Name = config.Name
+		motor.C0 = config:GetAttribute("C0") or CFrame.new()
+		motor.C1 = config:GetAttribute("C1") or CFrame.new()
+		motor.Part1 = entry.part1
+
+		-- Root-anchored joints are what the reload sequence drives directly;
+		-- everything else hangs off the Handle.
+		if entry.toRoot then
+			motor.Part0 = root
+			motor.Parent = root
+		else
+			motor.Part0 = handle
+			motor.Parent = handle
+		end
+
 		table.insert(self.createdJoints, motor)
 	end
 
+	local added = connectLooseParts(model, handle, motorised)
+
 	print(string.format(
-		"[Viewmodel] %s jointed from authored data | %d motor(s)",
+		"[Viewmodel] %s jointed from authored data | %d motor(s), %d weld(s) disabled, %d added",
 		self.gunModel.Name,
-		#built
+		#plan,
+		disabled,
+		added
 	))
 	return true
 end
@@ -398,7 +457,9 @@ function gun:_buildGripJoint(model: Instance, handle: BasePart)
 	gripMotor.Parent = rightArm
 	table.insert(self.createdJoints, gripMotor)
 
-	weldRemaining(model, handle, {})
+	-- The Tool's own welds already hold this weapon together; only genuinely
+	-- unconstrained parts need one adding.
+	connectLooseParts(model, handle, { [handle] = true })
 
 	print("GunGrip attached at RightGripAttachment for", self.gunModel.Name, gripMotor.C0)
 end
@@ -412,7 +473,6 @@ function gun:Equip()
 		end
 	end
 
-	stripJoints(self.clonedGun)
 	makeInert(self.clonedGun)
 
 	local root = self.viewModel.model:WaitForChild("HumanoidRootPart")

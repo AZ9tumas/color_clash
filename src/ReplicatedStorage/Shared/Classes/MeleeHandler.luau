@@ -43,13 +43,51 @@ local function swingSoundId(name)
 	return SWING_SOUNDS.Default
 end
 
-local function loadTrack(humanoid, animId, priority)
+local function loadTrack(animator, animId, priority, trackName)
 	local anim = Instance.new("Animation")
+	anim.Name = trackName or "MeleeAnimation"
 	anim.AnimationId = animId
-	local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
 	local track = animator:LoadAnimation(anim)
+	anim:Destroy()
 	track.Priority = priority
 	return track
+end
+
+-- The melee set is stock R6 character animation, so it is loaded twice: once on
+-- the real character, which replicates so other players see the swing, and once
+-- on the viewmodel, which is the only thing the local player can actually see now
+-- that the character is hidden during a round.
+-- swingOnly is used for the viewmodel: its resting pose comes from the melee hold
+-- (ViewmodelSettings.AnimationIds.MeleeHold) at Action2, and the movement set sits
+-- at Action3, so loading it there would mask the hold entirely. The character still
+-- gets the full set, which is what replicates to other players.
+local function loadTrackSet(animator, anims, rigTypeName, into, label, swingOnly)
+	if not animator or not anims then return end
+
+	local ok, err = pcall(function()
+		if anims.Idle and not swingOnly then
+			into.Idle = loadTrack(animator, anims.Idle, Enum.AnimationPriority.Action3, "MeleeIdle")
+			into.Idle.Looped = true
+		end
+		if anims.Walk and not swingOnly then
+			into.Walk = loadTrack(animator, anims.Walk, Enum.AnimationPriority.Action3, "MeleeWalk")
+			into.Walk.Looped = true
+		end
+		if anims.Sprint and not swingOnly then
+			into.Sprint = loadTrack(animator, anims.Sprint, Enum.AnimationPriority.Action3, "MeleeSprint")
+			into.Sprint.Looped = true
+		end
+		if anims.Swing then
+			local id = anims.Swing[rigTypeName]
+			if id then
+				into.Swing = loadTrack(animator, id, Enum.AnimationPriority.Action4, "MeleeSwing")
+			end
+		end
+	end)
+
+	if not ok then
+		warn(string.format("[Melee] %s animations failed: %s", label, tostring(err)))
+	end
 end
 
 function MeleeHandler.New(tool: Tool?)
@@ -65,7 +103,9 @@ function MeleeHandler.New(tool: Tool?)
 		rig = FirstPersonRig.GetShared(),
 		viewmodel = nil,
 		tracks = {} :: Types.AnimationTrackSet,
+		viewTracks = {} :: Types.AnimationTrackSet,
 		activeMoveTrack = nil,
+		activeViewMoveTrack = nil,
 		currentMoveAnim = nil,
 		moveAnimConn = nil,
 	}, melee)
@@ -85,9 +125,12 @@ function melee:Swing()
 	if not self.isEquipped then return end
 
 	local swingTrack = self.tracks.Swing
+	local viewSwingTrack = self.viewTracks.Swing
+
 	local cooldown = self.Properties.Cooldown
-	if swingTrack and swingTrack.Length > 0 then
-		cooldown = swingTrack.Length + 0.2
+	local reference = swingTrack or viewSwingTrack
+	if reference and reference.Length > 0 then
+		cooldown = reference.Length + 0.2
 	end
 	if tick() - self.lastSwing < cooldown then return end
 	self.lastSwing = tick()
@@ -95,6 +138,10 @@ function melee:Swing()
 	if swingTrack then
 		swingTrack:Stop(0)
 		swingTrack:Play(0.05)
+	end
+	if viewSwingTrack then
+		viewSwingTrack:Stop(0)
+		viewSwingTrack:Play(0.05)
 	end
 
 	local handle = self.tool:FindFirstChild("Handle") or self.tool:FindFirstChildWhichIsA("BasePart", true)
@@ -145,31 +192,28 @@ function melee:Equip()
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local anims = self.Properties.Animations
 
-	if humanoid and anims then
-		local ok, err = pcall(function()
-			if anims.Idle then
-				self.tracks.Idle = loadTrack(humanoid, anims.Idle, Enum.AnimationPriority.Action3)
-				self.tracks.Idle.Looped = true
-			end
-			if anims.Walk then
-				self.tracks.Walk = loadTrack(humanoid, anims.Walk, Enum.AnimationPriority.Action3)
-				self.tracks.Walk.Looped = true
-			end
-			if anims.Sprint then
-				self.tracks.Sprint = loadTrack(humanoid, anims.Sprint, Enum.AnimationPriority.Action3)
-				self.tracks.Sprint.Looped = true
-			end
-			if anims.Swing then
-				local id = anims.Swing[humanoid.RigType.Name]
-				if id then
-					self.tracks.Swing = loadTrack(humanoid, id, Enum.AnimationPriority.Action4)
-				end
-			end
-		end)
-		if not ok then
-			warn(string.format("[Melee] animations failed for %q: %s", self.tool.Name, tostring(err)))
-		end
-	end
+	local charAnimator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+	loadTrackSet(charAnimator, anims, humanoid and humanoid.RigType.Name or "R6", self.tracks, self.tool.Name)
+
+	local viewAnimator = self.viewmodel and self.viewmodel:GetAnimator()
+	local viewHumanoid = self.viewmodel and self.viewmodel.model:FindFirstChildOfClass("Humanoid")
+	loadTrackSet(
+		viewAnimator,
+		anims,
+		viewHumanoid and viewHumanoid.RigType.Name or "R6",
+		self.viewTracks,
+		self.tool.Name .. " viewmodel",
+		true -- swing only; the melee hold owns the viewmodel's resting pose
+	)
+
+	-- Start the idle here rather than waiting for the heartbeat below, which
+	-- early-returns until the character has a root. Nothing else poses a melee
+	-- weapon now that the rifle hold no longer stands in for one.
+	self.currentMoveAnim = "Idle"
+	self.activeMoveTrack = self.tracks.Idle
+	self.activeViewMoveTrack = self.viewTracks.Idle
+	if self.activeMoveTrack then self.activeMoveTrack:Play(0.15) end
+	if self.activeViewMoveTrack then self.activeViewMoveTrack:Play(0.15) end
 
 	self.moveAnimConn = RunService.Heartbeat:Connect(function()
 		local char = player.Character
@@ -189,9 +233,15 @@ function melee:Equip()
 
 		if self.currentMoveAnim ~= desired then
 			self.currentMoveAnim = desired
+
 			if self.activeMoveTrack then self.activeMoveTrack:Stop(0.25) end
+			if self.activeViewMoveTrack then self.activeViewMoveTrack:Stop(0.25) end
+
 			self.activeMoveTrack = self.tracks[desired] or self.tracks.Idle
+			self.activeViewMoveTrack = self.viewTracks[desired] or self.viewTracks.Idle
+
 			if self.activeMoveTrack then self.activeMoveTrack:Play(0.25) end
+			if self.activeViewMoveTrack then self.activeViewMoveTrack:Play(0.25) end
 		end
 	end)
 
@@ -201,21 +251,41 @@ end
 function melee:Unequip()
 	self.isEquipped = false
 
-	if self.viewmodel then
-		self.viewmodel:ClearWeapon()
-		self.viewmodel = nil
-	end
-
 	if self.moveAnimConn then
 		self.moveAnimConn:Disconnect()
 		self.moveAnimConn = nil
 	end
-	for _, track in pairs(self.tracks) do
-		track:Stop(0.15)
+
+	-- The viewmodel is shared across weapons, so its melee tracks must be released
+	-- here: a looping Idle left running at Action3 would override the next
+	-- weapon's pose. Destroy after the fade so the stop still looks smooth.
+	local function releaseSet(set)
+		local pending = {}
+		for name, track in pairs(set) do
+			track:Stop(0.15)
+			table.insert(pending, track)
+			set[name] = nil
+		end
+		if #pending > 0 then
+			task.delay(0.2, function()
+				for _, track in ipairs(pending) do
+					track:Destroy()
+				end
+			end)
+		end
 	end
-	table.clear(self.tracks)
+
+	releaseSet(self.tracks)
+	releaseSet(self.viewTracks)
+
 	self.activeMoveTrack = nil
+	self.activeViewMoveTrack = nil
 	self.currentMoveAnim = nil
+
+	if self.viewmodel then
+		self.viewmodel:ClearWeapon()
+		self.viewmodel = nil
+	end
 
 	MainHudController.SetWeaponInfo("N/A", "N/A")
 end

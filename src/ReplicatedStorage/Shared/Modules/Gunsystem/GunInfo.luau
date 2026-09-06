@@ -1,6 +1,9 @@
 -- One source of truth for weapon metadata and first-person placement.
 local ViewmodelSettings = require(script.Parent.ViewmodelSettings)
 local WEAPON_ACTION_ANIMATION_ID = ViewmodelSettings.AnimationIds.WeaponAction
+-- Generic Handle-hold pose for melee. Guns keep the rifle-shaped WeaponAction id,
+-- though an authored WeaponViewmodelData.<Weapon>.Hold still takes priority.
+local MELEE_HOLD_ANIMATION_ID = ViewmodelSettings.AnimationIds.MeleeHold
 
 return {
 	["Pistol"] = {
@@ -60,7 +63,7 @@ return {
 
 	["Wooden Knife"] = {
 		WeaponType = "Melee",
-		HoldAnimationId = WEAPON_ACTION_ANIMATION_ID,
+		HoldAnimationId = MELEE_HOLD_ANIMATION_ID,
 		ViewmodelGrip = {
 			Position = CFrame.new(0, -1.000001, 0.000015),
 			Orientation = CFrame.Angles(math.rad(0), math.rad(-90), math.rad(0)),
@@ -68,7 +71,7 @@ return {
 	},
 	["Knife"] = {
 		WeaponType = "Melee",
-		HoldAnimationId = WEAPON_ACTION_ANIMATION_ID,
+		HoldAnimationId = MELEE_HOLD_ANIMATION_ID,
 		ViewmodelGrip = {
 			Position = CFrame.new(0.000015, -0.800001, -0.000015),
 			Orientation = CFrame.Angles(math.rad(0), math.rad(-90), math.rad(0)),
@@ -76,7 +79,7 @@ return {
 	},
 	["Metal Knife"] = {
 		WeaponType = "Melee",
-		HoldAnimationId = WEAPON_ACTION_ANIMATION_ID,
+		HoldAnimationId = MELEE_HOLD_ANIMATION_ID,
 		ViewmodelGrip = {
 			Position = CFrame.new(0, -0.9, 0.000015),
 			Orientation = CFrame.Angles(math.rad(0), math.rad(90), math.rad(0)),
@@ -84,7 +87,7 @@ return {
 	},
 	["Wooden Axe"] = {
 		WeaponType = "Melee",
-		HoldAnimationId = WEAPON_ACTION_ANIMATION_ID,
+		HoldAnimationId = MELEE_HOLD_ANIMATION_ID,
 		ViewmodelGrip = {
 			Position = CFrame.new(-0.400009, -1, 0),
 			Orientation = CFrame.Angles(math.rad(0), math.rad(-90), math.rad(0)),
@@ -92,7 +95,7 @@ return {
 	},
 	["Axe"] = {
 		WeaponType = "Melee",
-		HoldAnimationId = WEAPON_ACTION_ANIMATION_ID,
+		HoldAnimationId = MELEE_HOLD_ANIMATION_ID,
 		ViewmodelGrip = {
 			Position = CFrame.new(0, -1.000001, 0),
 			Orientation = CFrame.Angles(math.rad(0), math.rad(-90), math.rad(0)),
@@ -100,7 +103,7 @@ return {
 	},
 	["Metal Axe"] = {
 		WeaponType = "Melee",
-		HoldAnimationId = WEAPON_ACTION_ANIMATION_ID,
+		HoldAnimationId = MELEE_HOLD_ANIMATION_ID,
 		ViewmodelGrip = {
 			Position = CFrame.new(-0.199989, -1.8, 0),
 			Orientation = CFrame.Angles(math.rad(0), math.rad(-90), math.rad(0)),
@@ -108,15 +111,15 @@ return {
 	},
 	["Wooden Bat"] = {
 		WeaponType = "Melee",
-		HoldAnimationId = WEAPON_ACTION_ANIMATION_ID,
+		HoldAnimationId = MELEE_HOLD_ANIMATION_ID,
 		ViewmodelGrip = {
-			Position = CFrame.new(0, -1.500002, 0),
+			Position = CFrame.new(0, 0, 0),
 			Orientation = CFrame.Angles(math.rad(0), math.rad(0), math.rad(0)),
 		},
 	},
 	["Metal Bat"] = {
 		WeaponType = "Melee",
-		HoldAnimationId = WEAPON_ACTION_ANIMATION_ID,
+		HoldAnimationId = MELEE_HOLD_ANIMATION_ID,
 		ViewmodelGrip = {
 			Position = CFrame.new(0, -1.900002, 0),
 			Orientation = CFrame.Angles(math.rad(0), math.rad(0), math.rad(0)),
@@ -124,7 +127,7 @@ return {
 	},
 	["Spiked Bat"] = {
 		WeaponType = "Melee",
-		HoldAnimationId = WEAPON_ACTION_ANIMATION_ID,
+		HoldAnimationId = MELEE_HOLD_ANIMATION_ID,
 		ViewmodelGrip = {
 			Position = CFrame.new(-0.099998, -2.200007, 0),
 			Orientation = CFrame.Angles(math.rad(0), math.rad(0), math.rad(0)),

@@ -91,12 +91,6 @@ local function posedJointsFor(humanoid)
 	return POSED_JOINTS_R6
 end
 
-local ARM_PARTS = {
-	["Right Arm"] = true, ["Left Arm"] = true,
-	RightUpperArm = true, RightLowerArm = true, RightHand = true,
-	LeftUpperArm = true, LeftLowerArm = true, LeftHand = true,
-}
-
 local VIEWMODEL_WEAPON_NAME = "ViewmodelWeapon"
 
 local function findJoint(character, parentName, jointName)
@@ -131,26 +125,14 @@ end
 
 local function applyBodyVisibility(character, hidden)
 	if not character then return end
-	local tool = character:FindFirstChildOfClass("Tool")
-	local toolData = tool and Items[tool.Name]
-	-- Catalogued weapons are rendered by the shared camera viewmodel. Keep the
-	-- real character arms and Tool hidden for both guns and melee weapons so the
-	-- legacy first-person representation cannot overlap the viewmodel clone.
-	local viewmodelOwnsWeapon = toolData ~= nil
+	-- The shared camera viewmodel renders the arms and the weapon in first person,
+	-- so while the player is in a round the real character is hidden outright:
+	-- body, arms, accessories and the held Tool. Anything left visible would draw
+	-- over the viewmodel clone, and gun visuals belong on the viewmodel now.
 	for _, part in character:GetDescendants() do
 		if part:IsA("BasePart") or part:IsA("Decal") then
 			if not part:FindFirstAncestor(VIEWMODEL_WEAPON_NAME) then
-				local target = 0
-				if hidden then
-					local refName = part:IsA("Decal") and (part.Parent and part.Parent.Name or "") or part.Name
-					if ARM_PARTS[refName] then
-						target = viewmodelOwnsWeapon and 1 or 0
-					elseif tool and part:IsDescendantOf(tool) then
-						target = viewmodelOwnsWeapon and 1 or 0
-					else
-						target = 1
-					end
-				end
+				local target = hidden and 1 or 0
 				if part.LocalTransparencyModifier ~= target then
 					part.LocalTransparencyModifier = target
 				end

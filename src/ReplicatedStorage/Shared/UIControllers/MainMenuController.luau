@@ -102,7 +102,9 @@ function MainMenuController.Init()
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed or player:GetAttribute("InMenu") ~= false then return end
 		if input.KeyCode == Enum.KeyCode.M then
-			toggleReturnToMenu()
+			-- M no longer returns to the main menu. The binding is kept so the
+			-- mechanic can be restored by uncommenting this line.
+			-- toggleReturnToMenu()
 		end
 	end)
 

@@ -32,6 +32,14 @@ local function clear(target)
 end
 
 local function refresh(target)
+	-- The local character is hidden outright during a round, but a Highlight draws
+	-- through transparency - it would leave the player staring at a glowing
+	-- silhouette of their own body. Team colour is only useful on other people.
+	if target == player then
+		clear(target)
+		return
+	end
+
 	local color = teamColorFor(target)
 	local character = target.Character
 

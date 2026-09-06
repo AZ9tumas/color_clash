@@ -23,6 +23,21 @@ local Container = MainFrame:WaitForChild("Container")
 local SectionTemplate = Container:WaitForChild("Section")
 local ItemTemplate = Container:WaitForChild("Template")
 
+local MainHUD = PlayerGui:WaitForChild("MainHUD")
+local DailyRewardsBtn = MainHUD:WaitForChild("DailyRewardsButton")
+
+-- MainHUD backs each of its buttons with a sibling Frame named "Frame" sitting at
+-- the same Y position; SpectateButton and MainMenuButton are paired the same way.
+local DailyRewardsBtnBackground = nil
+for _, child in MainHUD:GetChildren() do
+	if child:IsA("Frame") and child.Name == "Frame"
+		and math.abs(child.Position.Y.Scale - DailyRewardsBtn.Position.Y.Scale) < 0.01
+	then
+		DailyRewardsBtnBackground = child
+		break
+	end
+end
+
 local tabsData = {
 	DailyRewards = {
 		UI = CategoryScroll:WaitForChild("DailyRewards"),
@@ -293,6 +308,18 @@ end
 function RewardsController.Init()
 	SectionTemplate.Visible = false
 	ItemTemplate.Visible = false
+
+	UIAnimations.BindButtonAnimations(DailyRewardsBtn)
+	DailyRewardsBtn.MouseButton1Click:Connect(function()
+		UIAnimations.PopIn(RewardsFrame)
+	end)
+
+	if DailyRewardsBtnBackground then
+		DailyRewardsBtn:GetPropertyChangedSignal("Visible"):Connect(function()
+			DailyRewardsBtnBackground.Visible = DailyRewardsBtn.Visible
+		end)
+		DailyRewardsBtnBackground.Visible = DailyRewardsBtn.Visible
+	end
 	originalSectionPosition = SectionTemplate.Frame.Position
 	originalItemPosition = ItemTemplate.Frame.Position
 

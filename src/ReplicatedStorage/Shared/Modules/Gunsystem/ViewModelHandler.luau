@@ -14,6 +14,76 @@ local VIEWMODEL_DEFAULT_POS = Vector3.new(0, 0, 0)
 local VIEWMODEL_COLLISION_GROUP = "Viewmodel"
 local CHARACTER_MESH_MARKER = "ViewmodelCharacterMesh"
 
+-- AnimationTrack:Destroy() does NOT stop playback, and destroying straight after
+-- Stop() cancels the fade - the track then plays forever on the shared Animator,
+-- blending against whatever the next weapon loads. Let the fade finish first.
+local function releaseTrack(track: AnimationTrack?, fade: number?)
+	if not track then return end
+	local fadeTime = fade or 0.1
+	track:Stop(fadeTime)
+	task.delay(fadeTime + 0.05, function()
+		track:Destroy()
+	end)
+end
+
+local function priorityName(priority)
+	return (string.gsub(tostring(priority), "Enum%.AnimationPriority%.", ""))
+end
+
+-- Hooks the VIEWMODEL rig's own Animator. Animator.AnimationPlayed only fires for
+-- tracks loaded on that Animator, so the real character's animations can never
+-- show up here - these logs are viewmodel-only by construction.
+local function attachAnimationLogging(model)
+	if not ViewmodelSettings.LogAnimations then return end
+
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		warn("[ViewmodelAnim] no Animator on the viewmodel rig - nothing to log")
+		return
+	end
+
+	animator.AnimationPlayed:Connect(function(track)
+		local animation = track.Animation
+		local name = animation and animation.Name or "?"
+		local id = animation and animation.AnimationId or "?"
+
+		print(string.format(
+			"[ViewmodelAnim] PLAY  %-22s priority=%-8s looped=%-5s length=%.2f id=%s",
+			name, priorityName(track.Priority), tostring(track.Looped), track.Length, id
+		))
+
+		track.Stopped:Connect(function()
+			print(string.format("[ViewmodelAnim] STOP  %s", name))
+		end)
+	end)
+end
+
+-- Snapshot of everything currently running on the viewmodel, for when you want
+-- the whole picture rather than the transitions.
+function viewmodel:LogPlayingAnimations(label: string?)
+	local animator = self:GetAnimator()
+	if not animator then
+		warn("[ViewmodelAnim] no Animator on the viewmodel rig")
+		return
+	end
+
+	local tracks = animator:GetPlayingAnimationTracks()
+	print(string.format("[ViewmodelAnim] --- %s: %d track(s) ---", label or "playing now", #tracks))
+	for _, track in ipairs(tracks) do
+		local animation = track.Animation
+		print(string.format(
+			"[ViewmodelAnim]     %-22s priority=%-8s weight=%.2f time=%.2f/%.2f id=%s",
+			animation and animation.Name or "?",
+			priorityName(track.Priority),
+			track.WeightCurrent,
+			track.TimePosition,
+			track.Length,
+			animation and animation.AnimationId or "?"
+		))
+	end
+end
+
 local function stabilizeViewmodel(model)
 	local root = model:WaitForChild("HumanoidRootPart")
 
@@ -65,6 +135,7 @@ end
 function handler.new(_viewmodelOffset: Vector3)
 	local model = Assets:WaitForChild("Viewmodel"):Clone()
 	stabilizeViewmodel(model)
+	attachAnimationLogging(model)
 
 	local newmodel = {
 		model = model,
@@ -105,7 +176,7 @@ function viewmodel:_ensureBaseAnimation()
 	end
 
 	if self.baseAnimationTrack then
-		self.baseAnimationTrack:Destroy()
+		releaseTrack(self.baseAnimationTrack)
 		self.baseAnimationTrack = nil
 	end
 

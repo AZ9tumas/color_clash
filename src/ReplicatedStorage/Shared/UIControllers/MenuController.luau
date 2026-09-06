@@ -134,7 +134,6 @@ function MenuController.Init()
 	setupMenuButton(MenuScrollingFrame.Shop, UDim2.new(0.375, 0, 0.116, 0), UDim2.new(1, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
 	setupMenuButton(MenuScrollingFrame.Settings, UDim2.new(0.193, 0, 0.116, 0), UDim2.new(0.866, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
 	setupMenuButton(MenuScrollingFrame.Leaderboard, UDim2.new(0.193, 0, 0.116, 0), UDim2.new(0.81, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
-	setupMenuButton(MenuScrollingFrame.DailyRewards, UDim2.new(0.193, 0, 0.116, 0), UDim2.new(1, 0, 0.116, 0), UDim2.new(0.5, 0, 1, 0))
 
 	local SpectateFrame = MenuScrollingFrame:FindFirstChild("Spectate")
 	if SpectateFrame then
@@ -147,7 +146,6 @@ function MenuController.Init()
 	MenuScrollingFrame.Shop.btn.MouseButton1Click:Connect(function() if not playClicked then openSubMenu(ShopFrameUI) end end)
 	MenuScrollingFrame.Leaderboard.btn.MouseButton1Click:Connect(function() if not playClicked then openSubMenu(LeaderboardFrameUI) end end)
 	MenuScrollingFrame.Settings.btn.MouseButton1Click:Connect(function() if not playClicked then openSubMenu(SettingsFrameUI) end end)
-	MenuScrollingFrame.DailyRewards.btn.MouseButton1Click:Connect(function() if not playClicked then openSubMenu(RewardsFrameUI) end end)
 
 	local ShopExitBtn = ShopFrameUI:WaitForChild("ExitButton"):WaitForChild("btn")
 	local LeaderboardExitBtn = LeaderboardFrameUI:WaitForChild("ExitButton"):WaitForChild("btn")
@@ -162,7 +160,9 @@ function MenuController.Init()
 	ShopExitBtn.MouseButton1Click:Connect(function() closeSubMenu(ShopFrameUI) end)
 	LeaderboardExitBtn.MouseButton1Click:Connect(function() closeSubMenu(LeaderboardFrameUI) end)
 	SettingsExitBtn.MouseButton1Click:Connect(function() closeSubMenu(SettingsFrameUI) end)
-	RewardsExitBtn.MouseButton1Click:Connect(function() closeSubMenu(RewardsFrameUI) end)
+	-- Rewards opens from the MainHUD DailyRewardsButton now, not the menu, so
+	-- closing it must not pop the main menu back up over the game.
+	RewardsExitBtn.MouseButton1Click:Connect(function() UIAnimations.PopOut(RewardsFrameUI) end)
 
 	startMenuCamera()
 

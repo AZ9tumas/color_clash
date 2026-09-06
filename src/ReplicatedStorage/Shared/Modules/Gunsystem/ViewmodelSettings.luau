@@ -4,9 +4,11 @@ return {
 	--[[
 	-- As of now, CFrame.new(0, -1.5, 0) as shown to be the
 	-- perfect offset for the viewmodel (no character meshes).
+	--
+	-- For melee, viewmodel offset is CFrame.identity
 	--]]
 	PositionOffset = CFrame.new(0, -1.5, 0), --CFrame.new(-0.0213599205, -1.33662224, -1.63064575), -- CFrame.new(0, -1, -1),
-	SpringsEnabled = false,
+	SpringsEnabled = false, -- recommended to remain false.
 	AnimationsEnabled = true,
 
 	-- Build weapon joints from ReplicatedStorage.WeaponViewmodelData.<Weapon>.Joints
@@ -21,10 +23,20 @@ return {
 
 	-- Set false to use the rig's built-in arm meshes without cloning the
 	-- player's R6 CharacterMesh objects into the viewmodel.
-	ShowCharacterMeshes = false,
+	ShowCharacterMeshes = false, -- "true" will definitely break on some characters
+
+	-- Print every track that starts or stops on the VIEWMODEL's own Animator.
+	-- Scoped to the viewmodel rig by construction, so the real character's
+	-- animations never appear in these logs.
+	LogAnimations = true,
 
 	AnimationIds = {
 		ViewmodelLoad = "rbxassetid://79466363432702",
 		WeaponAction = "rbxassetid://83198374002696",
+
+		-- The main melee hold. This is the pose that drives the melee viewmodel:
+		-- the per-weapon Idle/Walk/Sprint set is deliberately NOT loaded onto the
+		-- viewmodel so nothing can mask it. The weapon must have a Handle.
+		MeleeHold = "rbxassetid://85046073154659",
 	},
 }
