@@ -35,6 +35,19 @@ RoundServer.CurrentState = RoundConfig.States.WaitingForPlayers
 RoundServer.TimeLeft = 0
 RoundServer.CurrentColor = nil
 
+-- Studio-only debug pause, driven by the DebugPauseController panel.
+RoundServer.Paused = false
+
+-- One second of round time. While paused this never returns, so no second is ever
+-- deducted and every countdown freezes where it stands. RoundMechanic's phase loop
+-- calls this too, through the roundServer reference it is constructed with, so the
+-- arena phase freezes with the clock instead of marching on without it.
+function RoundServer.Tick()
+	repeat
+		task.wait(1)
+	until not RoundServer.Paused
+end
+
 local roundMechanic = RoundMechanic.new(RoundServer)
 
 local function setState(newState, time)
@@ -174,19 +187,19 @@ local function startRoundLoop()
 			end
 
 			setState(RoundConfig.States.PostRound, 15)
-			while RoundServer.TimeLeft > 0 do task.wait(1); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
+			while RoundServer.TimeLeft > 0 do RoundServer.Tick(); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
 
 			setState(RoundConfig.States.Voting, RoundConfig.VotingDuration)
 			VotingManager.StartVoting()
 
-			while RoundServer.TimeLeft > 0 do task.wait(1); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
+			while RoundServer.TimeLeft > 0 do RoundServer.Tick(); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
 
 			setMode(VotingManager.GetWinner(defaultMode))
 
 			if RoundConfig.CurrentMode.TeamBased then
 				clearTeams()
 				setState(RoundConfig.States.TeamSelect, RoundConfig.TeamSelectDuration)
-				while RoundServer.TimeLeft > 0 do task.wait(1); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
+				while RoundServer.TimeLeft > 0 do RoundServer.Tick(); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft) end
 			end
 
 			MapMechanic.Generate()
@@ -259,7 +272,7 @@ local function startRoundLoop()
 					break
 				end
 
-				task.wait(1); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft)
+				RoundServer.Tick(); RoundServer.TimeLeft -= 1; RoundRemotes.GetUpdateEvent():FireAllClients(RoundServer.CurrentState, RoundServer.TimeLeft)
 			end
 
 			local teamWinner = teamsViable and resolveTeamWinner(roster, wipedOutWinner) or nil
@@ -376,6 +389,16 @@ function RoundServer.Init()
 	end)
 
 	RoundRemotes.GetPlayGameEvent().OnServerEvent:Connect(function(player) player:SetAttribute("InMenu", false) end)
+
+	-- Debug pause. Studio only: a published server must never be freezable by a
+	-- client firing this remote. The state goes on Workspace so every client's
+	-- panel reflects it without another remote.
+	Workspace:SetAttribute("RoundPaused", false)
+	RoundRemotes.GetTogglePauseEvent().OnServerEvent:Connect(function(_player, paused)
+		if not RunService:IsStudio() then return end
+		RoundServer.Paused = paused == true
+		Workspace:SetAttribute("RoundPaused", RoundServer.Paused)
+	end)
 
 	RoundRemotes.GetClientVoteEvent().OnServerEvent:Connect(function(player, modeName)
 		if RoundServer.CurrentState ~= RoundConfig.States.Voting then return end

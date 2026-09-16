@@ -44,7 +44,7 @@ return {
 	-- Every other gun-system diagnostic - joint building, grip placement, reload
 	-- sources, missing metadata - is gated on this. Off so the animation logs
 	-- above are the only thing that reaches the console.
-	Verbose = false,
+	Verbose = true,
 
 	AnimationIds = {
 		ViewmodelLoad = "rbxassetid://79466363432702",

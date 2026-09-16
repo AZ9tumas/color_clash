@@ -15,7 +15,8 @@ local remoteNames = {
 	PlayGameEvent = "RemoteEvent",
 	ResetEvent = "RemoteEvent",
 	MainMenuEvent = "RemoteEvent",
-	SelectTeamEvent = "RemoteEvent"
+	SelectTeamEvent = "RemoteEvent",
+	TogglePause = "RemoteEvent"
 }
 
 if isServer then
@@ -46,5 +47,7 @@ function RoundRemotes.GetPlayGameEvent() return getRemote("PlayGameEvent") end
 function RoundRemotes.GetResetEvent() return getRemote("ResetEvent") end
 function RoundRemotes.GetMainMenuEvent() return getRemote("MainMenuEvent") end
 function RoundRemotes.GetSelectTeamEvent() return getRemote("SelectTeamEvent") end
+-- Studio-only debug pause. The server ignores this outside Studio.
+function RoundRemotes.GetTogglePauseEvent() return getRemote("TogglePause") end
 
 return RoundRemotes

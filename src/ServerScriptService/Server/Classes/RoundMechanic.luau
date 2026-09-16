@@ -44,9 +44,37 @@ function RoundMechanic:Start()
 			return math.max(floor, math.floor(base * (ramp.Factor or 1) ^ cycle + 0.5))
 		end
 
+		-- A paused round must not advance its phase either. RoundServer.Tick blocks
+		-- while paused, so no second is deducted here and the arena stays in whatever
+		-- phase it was in - weapons still in hand if it froze during the shoot phase.
+		-- Gameplay is untouched: shooting, pushing and damage all run off remotes and
+		-- Heartbeat, not off this loop.
+		local function tick()
+			local roundServer = self.roundServer
+			if roundServer and roundServer.Tick then
+				roundServer.Tick()
+			else
+				task.wait(1)
+			end
+		end
+
+		local function paused()
+			return self.roundServer ~= nil and self.roundServer.Paused == true
+		end
+
+		-- Held at phase boundaries so a paused round never starts a new colour cycle.
+		-- Deliberately not used inside the flash telegraph below: pausing mid-flash
+		-- lets it finish rather than leaving the map half transparent with its
+		-- collisions off.
+		local function waitForResume()
+			while paused() and inGame() do
+				task.wait(0.1)
+			end
+		end
+
 		local function hold(seconds)
 			while seconds > 0 and inGame() do
-				task.wait(1)
+				tick()
 				seconds -= 1
 			end
 		end
@@ -81,6 +109,8 @@ function RoundMechanic:Start()
 		end
 
 		while inGame() do
+			waitForResume()
+			if not inGame() then break end
 
 			local announceTime = scaled(phases.AnnounceDuration, "Announce")
 			self.roundServer.CurrentColor = colors[rng:NextInteger(1, #colors)]

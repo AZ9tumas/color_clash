@@ -11,8 +11,8 @@ return {
 		MaxAmmo = 15,
 		HoldAnimationId = WEAPON_ACTION_ANIMATION_ID,
 		ViewmodelGrip = {
-			Position = CFrame.new(0, -0.2, 0.6),
-			Orientation = CFrame.Angles(math.rad(0), math.rad(-90), math.rad(90)),
+			Position = CFrame.new(0.984, -0.645, -0.066),
+			Orientation = CFrame.Angles(math.rad(0), math.rad(90), math.rad(-90)),
 		},
 	},
 	["Sniper"] = {

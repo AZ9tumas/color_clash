@@ -521,6 +521,10 @@ function gun:_buildAuthoredJoints(model: Instance, root: BasePart, handle: BaseP
 		disabled,
 		added
 	))
+
+	-- debug: look into the actual motor6ds
+	logf("[Viewmodel] The actual authored motor6ds", self.createdJoints)
+
 	return true
 end
 
@@ -543,9 +547,10 @@ function gun:_buildGripJoint(model: Instance, handle: BasePart)
 
 	-- The Tool's own welds already hold this weapon together; only genuinely
 	-- unconstrained parts need one adding.
-	connectLooseParts(model, handle, { [handle] = true })
+	-- This breaks stuff.
+	-- connectLooseParts(model, handle, { [handle] = true })
 
-	logf("GunGrip attached at RightGripAttachment for", self.gunModel.Name, gripMotor.C0)
+	logf("GunGrip attached at RightGripAttachment for", self.gunModel:GetFullName())
 end
 
 -- The viewmodel is posed by the authored joints, so it needs the geometry those
