@@ -153,7 +153,9 @@ function handler.new(_viewmodelOffset: Vector3)
 
 	if not newmodel.model.PrimaryPart then
 		newmodel.model.PrimaryPart = newmodel.model:FindFirstChild("HumanoidRootPart")
-		warn("ViewModel's PrimaryPart was not set in Studio. Defaulting to HumanoidRootPart.")
+		if ViewmodelSettings.Verbose then
+			warn("ViewModel's PrimaryPart was not set in Studio. Defaulting to HumanoidRootPart.")
+		end
 	end
 
 	assert(newmodel.model:FindFirstChild("Right Arm"), "Viewmodel is missing Right Arm")
@@ -171,7 +173,9 @@ function viewmodel:_ensureBaseAnimation()
 	local humanoid = self.model:FindFirstChildOfClass("Humanoid")
 	local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
 	if not animator then
-		warn("[ViewmodelAnimation] Cannot play base animation: no Animator")
+		if ViewmodelSettings.Verbose then
+			warn("[ViewmodelAnimation] Cannot play base animation: no Animator")
+		end
 		return false
 	end
 
@@ -189,7 +193,9 @@ function viewmodel:_ensureBaseAnimation()
 	animation:Destroy()
 
 	if not success then
-		warn("[ViewmodelAnimation] Unable to load base viewmodel animation:", track)
+		if ViewmodelSettings.Verbose then
+			warn("[ViewmodelAnimation] Unable to load base viewmodel animation:", track)
+		end
 		return false
 	end
 
@@ -198,10 +204,12 @@ function viewmodel:_ensureBaseAnimation()
 	track:Play()
 	self.baseAnimationTrack = track
 
-	print(string.format(
-		"[ViewmodelAnimation] Playing persistent base animation | AnimationId=%s",
-		ViewmodelSettings.AnimationIds.ViewmodelLoad
-	))
+	if ViewmodelSettings.Verbose then
+		print(string.format(
+			"[ViewmodelAnimation] Playing persistent base animation | AnimationId=%s",
+			ViewmodelSettings.AnimationIds.ViewmodelLoad
+		))
+	end
 	return true
 end
 

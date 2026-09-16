@@ -16,6 +16,12 @@ local function log(message, ...)
 	end
 end
 
+local function logWarn(message, ...)
+	if FXConfig.GunDebug then
+		warn("[Gun] " .. string.format(message, ...))
+	end
+end
+
 local GunClient = {}
 
 local player = Players.LocalPlayer
@@ -38,7 +44,7 @@ local function teardown(tool: Tool)
 
 	local ok, err = pcall(function() controller:Destroy() end)
 	if not ok then
-		warn(string.format("[Gun] teardown failed for %q: %s", tool.Name, tostring(err)))
+		logWarn("teardown failed for %q: %s", tool.Name, tostring(err))
 	end
 	log("teardown %s (tool destroyed or removed)", tool.Name)
 end
@@ -57,7 +63,7 @@ local function setup(instance: Instance)
 	local controller = result :: Types.WeaponController?
 	if not ok or not controller then
 		if not ok then
-			warn(string.format("[Gun] setup failed for %q: %s", tool.Name, tostring(result)))
+			logWarn("setup failed for %q: %s", tool.Name, tostring(result))
 		end
 		return
 	end
@@ -75,7 +81,7 @@ local function setup(instance: Instance)
 				currentlyEquippedGun = controller
 				log("equipped %s: shoulder cam + arm tracking on", tool.Name)
 			else
-				warn(string.format("[Gun] equip FAILED for %q: %s", tool.Name, tostring(err)))
+				logWarn("equip FAILED for %q: %s", tool.Name, tostring(err))
 			end
 		elseif not shouldEquip and controller.isEquipped then
 			pcall(function() controller:Unequip() end)

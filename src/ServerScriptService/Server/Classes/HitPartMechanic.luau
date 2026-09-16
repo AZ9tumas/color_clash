@@ -5,6 +5,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local PlayerUtil = require(Shared.Modules.Utils.PlayerUtil)
 local RewardManager = require(Shared.Modules.Game.RewardManager)
+local FXConfig = require(Shared.Modules.Core.FXConfig)
+
+-- Off by default so the console stays reserved for the viewmodel animation
+-- logs; flip FXConfig.Logging to see them.
+local function logWarn(message: string)
+	if FXConfig.Logging then
+		warn(message)
+	end
+end
 
 local HitPartMechanic = {}
 
@@ -73,7 +82,7 @@ end
 function HitPartMechanic.Build()
 	local map = Workspace:FindFirstChild("Map")
 	if not map then
-		warn("[HitPart] Workspace.Map not found, hit part not created")
+		logWarn("[HitPart] Workspace.Map not found, hit part not created")
 		return nil
 	end
 
@@ -85,7 +94,7 @@ function HitPartMechanic.Build()
 
 	local minX, maxX, minZ, maxZ, minY = measureMap(map)
 	if not minX then
-		warn("[HitPart] Workspace.Map contains no BaseParts, hit part not created")
+		logWarn("[HitPart] Workspace.Map contains no BaseParts, hit part not created")
 		return nil
 	end
 

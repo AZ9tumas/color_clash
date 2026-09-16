@@ -7,6 +7,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Shared = ReplicatedStorage.Shared
 local RoundConfig = require(Shared.Modules.Core.RoundConfig)
+local FXConfig = require(Shared.Modules.Core.FXConfig)
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
 local PlayerUtil = require(Shared.Modules.Utils.PlayerUtil)
 local VotingManager = require(Shared.Modules.Game.VotingManager)
@@ -17,6 +18,14 @@ local SpectateMechanic = require(ServerScriptService.Server.Classes.SpectateMech
 local HitPartMechanic = require(ServerScriptService.Server.Classes.HitPartMechanic)
 local MapMechanic = require(ServerScriptService.Server.Classes.MapMechanic)
 local QuestServer = require(ServerScriptService.Server.Services.QuestService.QuestServer)
+
+-- Off by default so the console stays reserved for the viewmodel animation
+-- logs; flip FXConfig.Logging to see spawn placement retries.
+local function logWarn(message: string)
+	if FXConfig.Logging then
+		warn(message)
+	end
+end
 
 local rng = Random.new()
 
@@ -149,7 +158,7 @@ local function placeOnMap(player, gameSpawn, claimed)
 			return landed
 		end
 
-		warn(string.format("[Round] %s slid off their spawn cell on attempt %d, replacing", player.Name, attempt))
+		logWarn(string.format("[Round] %s slid off their spawn cell on attempt %d, replacing", player.Name, attempt))
 	end
 
 	return nil

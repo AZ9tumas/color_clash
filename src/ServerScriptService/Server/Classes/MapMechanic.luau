@@ -4,6 +4,16 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local MapConfig = require(Shared.Modules.Core.MapConfig)
+local FXConfig = require(Shared.Modules.Core.FXConfig)
+
+-- These fire on a broken or missing map. They are off by default so the console
+-- stays reserved for the viewmodel animation logs; flip FXConfig.Logging to
+-- bring them back while diagnosing the map.
+local function logWarn(message: string)
+	if FXConfig.Logging then
+		warn(message)
+	end
+end
 
 local MapMechanic = {}
 
@@ -95,7 +105,7 @@ end
 function MapMechanic.Init()
 	local map = Workspace:FindFirstChild("Map")
 	if not map then
-		warn("[Map] Workspace.Map not found, templates not harvested")
+		logWarn("[Map] Workspace.Map not found, templates not harvested")
 		return false
 	end
 
@@ -121,7 +131,7 @@ function MapMechanic.Init()
 	table.sort(variantNames)
 
 	if #variantNames == 0 then
-		warn("[Map] no cell variants found under Workspace.Map, regeneration disabled")
+		logWarn("[Map] no cell variants found under Workspace.Map, regeneration disabled")
 		return false
 	end
 
@@ -131,12 +141,12 @@ end
 function MapMechanic.Generate()
 	local map = Workspace:FindFirstChild("Map")
 	if not map then
-		warn("[Map] Workspace.Map not found, skipping regeneration")
+		logWarn("[Map] Workspace.Map not found, skipping regeneration")
 		return false
 	end
 
 	if #variantNames == 0 then
-		warn("[Map] no templates harvested, skipping regeneration")
+		logWarn("[Map] no templates harvested, skipping regeneration")
 		return false
 	end
 
@@ -149,7 +159,7 @@ function MapMechanic.Generate()
 	end
 
 	if #usable == 0 then
-		warn("[Map] template folder is empty or detached, re-harvesting")
+		logWarn("[Map] template folder is empty or detached, re-harvesting")
 		if not MapMechanic.Init() then return false end
 		for _, name in variantNames do
 			local template = templateFolder:FindFirstChild(name)
@@ -158,13 +168,13 @@ function MapMechanic.Generate()
 	end
 
 	if #usable == 0 then
-		warn("[Map] still no usable templates, skipping regeneration")
+		logWarn("[Map] still no usable templates, skipping regeneration")
 		return false
 	end
 
 	local rows, cols = MapConfig.Rows, MapConfig.Cols
 	if rows < 1 or cols < 1 then
-		warn("[Map] MapConfig.Rows/Cols must be at least 1, skipping regeneration")
+		logWarn("[Map] MapConfig.Rows/Cols must be at least 1, skipping regeneration")
 		return false
 	end
 

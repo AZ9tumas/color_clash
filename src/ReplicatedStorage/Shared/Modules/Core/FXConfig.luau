@@ -2,7 +2,14 @@ local FXConfig = {}
 
 FXConfig.SoundFolder = "GameSounds"
 
-FXConfig.GunDebug = true
+-- Master switch for the [Gun], [Melee] and [Rig] gameplay logs. Off so the
+-- console carries nothing but the viewmodel animation logs.
+FXConfig.GunDebug = false
+
+-- The server-side [Map], [HitPart] and [Round] warnings. These only fire on a
+-- broken map or a failed spawn, but they are off for the same reason: the
+-- console is reserved for the viewmodel animation logs. Flip to diagnose.
+FXConfig.Logging = false
 
 FXConfig.UI = {
 	Enabled = true,

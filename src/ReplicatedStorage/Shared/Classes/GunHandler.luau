@@ -24,6 +24,12 @@ local function log(message, ...)
 	end
 end
 
+local function logWarn(message, ...)
+	if FXConfig.GunDebug then
+		warn("[Gun] " .. string.format(message, ...))
+	end
+end
+
 local GunHandler = {}
 local gun = {}
 gun.__index = gun
@@ -273,10 +279,10 @@ function gun:Equip()
 
 	if self.viewmodel then
 		if not self.viewmodel:SetWeapon(self.tool.Name, nil, self.tool) then
-			warn(string.format("[Gun] %q has no authored rig - the viewmodel keeps empty hands", self.tool.Name))
+			logWarn("%q has no authored rig - the viewmodel keeps empty hands", self.tool.Name)
 		end
 	else
-		warn("[Gun] no viewmodel is up - first person may not be active yet")
+		logWarn("no viewmodel is up - first person may not be active yet")
 	end
 
 	self:updateUI()

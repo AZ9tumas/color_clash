@@ -11,6 +11,17 @@ return {
 	SpringsEnabled = false, -- recommended to remain false.
 	AnimationsEnabled = true,
 
+	-- Clone WeaponViewmodelData.<Weapon>.WeaponModel for the viewmodel instead of
+	-- the Tool. The Tool is authored for the character's hand: its parts sit on a
+	-- different axis from the joints, it can be missing parts the sequences drive
+	-- (the SMG has no Mag at all), and its internal welds bind every part rigidly
+	-- to the Handle, which silently overrides the authored motors. Set false to go
+	-- back to cloning the Tool.
+	-- OFF: the authored WeaponModels are joint-authoring proxies, not the shipping
+	-- visuals - they lack the Tool's meshes/textures, so the viewmodel renders as
+	-- untextured blocks. Do not turn this on without fixing the visuals first.
+	UseAuthoredWeaponModel = false,
+
 	-- Build weapon joints from ReplicatedStorage.WeaponViewmodelData.<Weapon>.Joints
 	-- so the authored reload sequences can drive the magazine, trigger and shells.
 	-- Set false to fall back to the single GunGrip motor on RightGripAttachment.
@@ -29,6 +40,11 @@ return {
 	-- Scoped to the viewmodel rig by construction, so the real character's
 	-- animations never appear in these logs.
 	LogAnimations = true,
+
+	-- Every other gun-system diagnostic - joint building, grip placement, reload
+	-- sources, missing metadata - is gated on this. Off so the animation logs
+	-- above are the only thing that reaches the console.
+	Verbose = false,
 
 	AnimationIds = {
 		ViewmodelLoad = "rbxassetid://79466363432702",

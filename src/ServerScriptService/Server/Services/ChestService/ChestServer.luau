@@ -19,7 +19,7 @@ function ChestServer.Init()
 				prompt.Parent = chest.PrimaryPart
 				
 				prompt.Triggered:Connect(function(player)
-					print(player.Name .. " opened " .. chest.Name)
+					-- print(player.Name .. " opened " .. chest.Name)
 					prompt.Enabled = false
 					task.wait(5) 
 					prompt.Enabled = true

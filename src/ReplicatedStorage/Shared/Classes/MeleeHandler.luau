@@ -85,7 +85,7 @@ local function loadTrackSet(animator, anims, rigTypeName, into, label, swingOnly
 		end
 	end)
 
-	if not ok then
+	if not ok and FXConfig.GunDebug then
 		warn(string.format("[Melee] %s animations failed: %s", label, tostring(err)))
 	end
 end

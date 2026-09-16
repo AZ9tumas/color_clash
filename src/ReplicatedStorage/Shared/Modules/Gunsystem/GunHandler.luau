@@ -6,8 +6,80 @@ local viewmodelHandler = require(script.Parent.ViewModelHandler)
 local ViewmodelSettings = require(script.Parent.ViewmodelSettings)
 local FXUtil = require(ReplicatedStorage.Shared.Modules.Utils.FXUtil)
 
+-- Every diagnostic in the gun system goes through these, so the console can be
+-- left showing nothing but the viewmodel animation logs. Flip
+-- ViewmodelSettings.Verbose to get the joint/grip/reload chatter back.
+local function logf(...)
+	if ViewmodelSettings.Verbose then
+		print(...)
+	end
+end
+
+local function warnf(...)
+	if ViewmodelSettings.Verbose then
+		warn(...)
+	end
+end
+
 local MUZZLE_ATTACHMENT_NAMES = { "ProjectileStart", "MuzzlePoint", "Muzzle" }
 local EJECT_ATTACHMENT_NAMES = { "EjectPort", "ShellEject", "ShellPort" }
+local BARREL_HINTS = { "barrel", "muzzle" }
+
+-- The authored WeaponModels carry no attachments, so the viewmodel has to place
+-- its own muzzle anchor. The tip is the corner of the barrel furthest from the
+-- Handle, which follows each weapon's own axis rather than assuming one - the
+-- models point along +X, -X and -Z depending on the weapon, and the AR has no
+-- barrel part at all, so it falls back to the furthest corner of any part.
+local function furthestCorner(model: Instance, handle: BasePart, barrelsOnly: boolean): Vector3?
+	local best, bestDistance = nil, -1
+
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") and part ~= handle then
+			local hinted = false
+			for _, hint in ipairs(BARREL_HINTS) do
+				if string.find(string.lower(part.Name), hint, 1, true) then
+					hinted = true
+					break
+				end
+			end
+
+			if hinted or not barrelsOnly then
+				local relative = handle.CFrame:ToObjectSpace(part.CFrame)
+				for x = -1, 1, 2 do
+					for y = -1, 1, 2 do
+						for z = -1, 1, 2 do
+							local corner = (relative * CFrame.new(
+								part.Size.X / 2 * x,
+								part.Size.Y / 2 * y,
+								part.Size.Z / 2 * z
+							)).Position
+							if corner.Magnitude > bestDistance then
+								best, bestDistance = corner, corner.Magnitude
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	return best
+end
+
+local function ensureMuzzleAnchor(model: Instance, handle: BasePart): Attachment
+	local existing = handle:FindFirstChild("ProjectileStart")
+	if existing and existing:IsA("Attachment") then
+		return existing
+	end
+
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "ProjectileStart"
+	attachment.Position = furthestCorner(model, handle, true)
+		or furthestCorner(model, handle, false)
+		or Vector3.new(0, 0, -handle.Size.Z / 2)
+	attachment.Parent = handle
+	return attachment
+end
 
 -- AnimationTrack:Destroy() does NOT stop playback, and destroying straight after
 -- Stop() cancels the fade - the track then plays forever on the shared Animator.
@@ -40,7 +112,7 @@ local function registerSequence(sequence: KeyframeSequence): string?
 		return KeyframeSequenceProvider:RegisterKeyframeSequence(sequence)
 	end)
 	if not ok then
-		warn(string.format(
+		warnf(string.format(
 			"[ViewmodelAnimation] Could not register %s: %s",
 			sequence:GetFullName(),
 			tostring(contentId)
@@ -118,15 +190,21 @@ end
 -- Handle, or the reload cannot move it. Those welds are DISABLED, never destroyed:
 -- the weapon keeps every weld it shipped with, and re-enabling one is a single
 -- property. Welds that touch nothing motorised are left completely alone.
-local function disableConflictingWelds(model: Instance, motorised: { [BasePart]: boolean }, handle: BasePart)
+local function disableConflictingWelds(model: Instance, motorised: { [BasePart]: boolean }, _handle: BasePart)
 	local disabled = 0
-	if disabled == 0 then return disabled end
+
+	-- Disabled again: with the Tool geometry the weapons ship with, these welds are
+	-- what hold each gun together, and switching them off relocates parts into slots
+	-- the Tool's meshes were never built for.
+	if true then return disabled end
 
 	for _, descendant in ipairs(model:GetDescendants()) do
 		local p0, p1 = constraintParts(descendant)
 		if (p0 or p1) and descendant.Enabled then
-			local conflicts = (p0 and p0 ~= handle and motorised[p0])
-				or (p1 and p1 ~= handle and motorised[p1])
+			-- Only a weld between two motorised parts is a genuine conflict. A weld
+			-- holding an unmotorised part (a Body or Muzzle) is what carries that
+			-- part along with the joint that does move, so it has to stay on.
+			local conflicts = p0 ~= nil and p1 ~= nil and motorised[p0] and motorised[p1]
 			if conflicts then
 				descendant.Enabled = false
 				disabled += 1
@@ -162,7 +240,10 @@ end
 -- Anything left with no working constraint would float free, so it gets welded to
 -- the Handle. Parts the Tool already welds are skipped: we add, never replace.
 local function connectLooseParts(model: Instance, handle: BasePart, motorised: { [BasePart]: boolean })
+	-- Disabled again alongside disableConflictingWelds: the Tool's own welds already
+	-- constrain every part, so this has nothing to add and only risks new joints.
 	if true then return 0 end
+
 	local constrained = { [handle] = true }
 	for part in pairs(motorised) do constrained[part] = true end
 
@@ -192,7 +273,7 @@ end
 function handler.New(gunModel: Tool, sharedViewModel)
 	local info = gunInfo[gunModel.Name]
 	if not info then
-		warn("Missing viewmodel metadata for", gunModel.Name)
+		warnf("Missing viewmodel metadata for", gunModel.Name)
 		return nil
 	end
 
@@ -203,6 +284,7 @@ function handler.New(gunModel: Tool, sharedViewModel)
 		ownsViewModel = sharedViewModel == nil,
 		Properties = info,
 		dataFolder = weaponDataFolder(gunModel.Name),
+		usingAuthoredGeometry = false,
 		tracks = {},
 		createdJoints = {},
 		muzzle = nil,
@@ -220,7 +302,7 @@ function gun:_loadTrack(source, trackName: string): AnimationTrack?
 
 	local animator = self.viewModel:GetAnimator()
 	if not animator then
-		warn("[ViewmodelAnimation] Viewmodel rig has no Animator")
+		warnf("[ViewmodelAnimation] Viewmodel rig has no Animator")
 		return nil
 	end
 
@@ -233,7 +315,7 @@ function gun:_loadTrack(source, trackName: string): AnimationTrack?
 	animation:Destroy()
 
 	if not success then
-		warn(string.format(
+		warnf(string.format(
 			"[ViewmodelAnimation] Could not load %s for %s: %s",
 			trackName,
 			self.gunModel.Name,
@@ -250,7 +332,9 @@ function gun:_holdSource()
 	local sequence = self.dataFolder and self.dataFolder:FindFirstChild("Hold")
 	if sequence and sequence:IsA("KeyframeSequence") then return sequence end
 
-	local source = self.clonedGun or self.gunModel
+	-- Animations live on the Tool asset, never on the authored WeaponModel, so
+	-- these always read the original Tool rather than whatever was cloned.
+	local source = self.gunModel
 	local animation = source and source:FindFirstChild("Hold")
 	if animation and animation:IsA("Animation") and animation.AnimationId ~= "" then
 		return animation
@@ -266,7 +350,7 @@ function gun:_reloadSource()
 	local sequence = self.dataFolder and self.dataFolder:FindFirstChild("Reload")
 	if sequence and sequence:IsA("KeyframeSequence") then return sequence end
 
-	local source = self.clonedGun or self.gunModel
+	local source = self.gunModel
 	local animation = source and source:FindFirstChild("Reload")
 	if animation and animation:IsA("Animation") and animation.AnimationId ~= "" then
 		return animation
@@ -278,7 +362,7 @@ function gun:_shootSource()
 	local sequence = self.dataFolder and self.dataFolder:FindFirstChild("Shoot")
 	if sequence and sequence:IsA("KeyframeSequence") then return sequence end
 
-	local source = self.clonedGun or self.gunModel
+	local source = self.gunModel
 	local animation = source and source:FindFirstChild("Shoot")
 	if animation and animation:IsA("Animation") and animation.AnimationId ~= "" then
 		return animation
@@ -345,7 +429,7 @@ function gun:PlayReloadAnimation(duration: number?)
 		track:AdjustSpeed(length / duration)
 	end
 
-	print(string.format(
+	logf(string.format(
 		"[ViewmodelAnimation] Playing reload for %s | source=%s",
 		self.gunModel.Name,
 		self.dataFolder and self.dataFolder:FindFirstChild("Reload") and "KeyframeSequence" or "Animation"
@@ -398,7 +482,7 @@ function gun:_buildAuthoredJoints(model: Instance, root: BasePart, handle: BaseP
 	end
 
 	if not motorised[handle] then
-		warn(string.format(
+		warnf(string.format(
 			"[Viewmodel] %s has no authored Handle joint - falling back to the grip attachment",
 			self.gunModel.Name
 		))
@@ -430,7 +514,7 @@ function gun:_buildAuthoredJoints(model: Instance, root: BasePart, handle: BaseP
 
 	local added = connectLooseParts(model, handle, motorised)
 
-	print(string.format(
+	logf(string.format(
 		"[Viewmodel] %s jointed from authored data | %d motor(s), %d weld(s) disabled, %d added",
 		self.gunModel.Name,
 		#plan,
@@ -461,13 +545,30 @@ function gun:_buildGripJoint(model: Instance, handle: BasePart)
 	-- unconstrained parts need one adding.
 	connectLooseParts(model, handle, { [handle] = true })
 
-	print("GunGrip attached at RightGripAttachment for", self.gunModel.Name, gripMotor.C0)
+	logf("GunGrip attached at RightGripAttachment for", self.gunModel.Name, gripMotor.C0)
+end
+
+-- The viewmodel is posed by the authored joints, so it needs the geometry those
+-- joints were captured against. A Tool clone also gets auto-equipped by the
+-- viewmodel's Humanoid, and the RightGrip weld the engine creates for it fights
+-- the authored Handle motor; a plain Model is never equipped, so that loop is
+-- gone too.
+function gun:_geometrySource(): (Instance, boolean)
+	if ViewmodelSettings.UseAuthoredWeaponModel and self.dataFolder then
+		local authored = self.dataFolder:FindFirstChild("WeaponModel")
+		if authored and authored:IsA("Model") and findPartNamed(authored, "Handle") then
+			return authored, true
+		end
+	end
+	return self.gunModel, false
 end
 
 function gun:Equip()
-	self.clonedGun = self.gunModel:Clone()
+	local geometry, authoredGeometry = self:_geometrySource()
+	self.clonedGun = geometry:Clone()
+	self.usingAuthoredGeometry = authoredGeometry
 
-	for _, v in pairs(self.clonedGun:GetChildren()) do
+	for _, v in ipairs(self.clonedGun:GetDescendants()) do
 		if v:IsA("BasePart") then
 			v.Transparency = 0
 		end
@@ -490,11 +591,13 @@ function gun:Equip()
 	-- FX anchors live on the cloned gun, so muzzle flash and shell ejection come
 	-- off the weapon the player is actually looking at.
 	self.muzzle = findNamed(self.clonedGun, MUZZLE_ATTACHMENT_NAMES)
+	if not self.muzzle then
+		self.muzzle = ensureMuzzleAnchor(self.clonedGun, handle)
+		logf(string.format("[Viewmodel] %s: placed muzzle anchor at %s",
+			self.gunModel.Name, tostring(self.muzzle.Position)))
+	end
 	self.ejectPort = findNamed(self.clonedGun, EJECT_ATTACHMENT_NAMES) or self.muzzle
 	self.muzzleFX = self.muzzle and FXUtil.EnsureMuzzleFX(self.muzzle) or nil
-	if not self.muzzle then
-		warn(string.format("[Viewmodel] %s has no muzzle attachment - FX will fall back to the Handle", self.gunModel.Name))
-	end
 
 	self.viewModel:Enable()
 	self:PlayHoldAnimation()
@@ -555,7 +658,7 @@ end
 function handler.PlayEquippedAnimation()
 	local controller = activeController()
 	if not controller then
-		warn("[ViewmodelAnimation] Cannot play weapon animation: no weapon is equipped")
+		warnf("[ViewmodelAnimation] Cannot play weapon animation: no weapon is equipped")
 		return false, "EQUIP A WEAPON"
 	end
 	return controller:PlayHoldAnimation()
@@ -564,11 +667,11 @@ end
 function handler.PlayEquippedReloadAnimation()
 	local controller = activeController()
 	if not controller then
-		warn("[ViewmodelAnimation] Cannot play reload animation: no weapon is equipped")
+		warnf("[ViewmodelAnimation] Cannot play reload animation: no weapon is equipped")
 		return false, "EQUIP A WEAPON"
 	end
 	if not controller:HasReloadAnimation() then
-		warn(string.format(
+		warnf(string.format(
 			"[ViewmodelAnimation] Reload animation unavailable for %s",
 			controller.gunModel.Name
 		))

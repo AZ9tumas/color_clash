@@ -5,6 +5,7 @@ local Shared = ReplicatedStorage.Shared
 local Gunsystem = Shared.Modules.Gunsystem
 local GunsystemGunHandler = require(Gunsystem.GunHandler)
 local ViewModelHandler = require(Gunsystem.ViewModelHandler)
+local ViewmodelSettings = require(Gunsystem.ViewmodelSettings)
 
 local Viewmodel = {}
 Viewmodel.__index = Viewmodel
@@ -70,7 +71,9 @@ function Viewmodel:SetWeapon(weaponName: string, _config, tool: Tool?): boolean
 
 	local sourceTool = tool or equippedTool(weaponName)
 	if not sourceTool then
-		warn(string.format("[Viewmodel] %s has no equipped Tool", weaponName))
+		if ViewmodelSettings.Verbose then
+			warn(string.format("[Viewmodel] %s has no equipped Tool", weaponName))
+		end
 		return false
 	end
 
@@ -81,7 +84,9 @@ function Viewmodel:SetWeapon(weaponName: string, _config, tool: Tool?): boolean
 		controller:Equip()
 	end)
 	if not ok then
-		warn(string.format("[Viewmodel] failed to equip %s: %s", weaponName, tostring(err)))
+		if ViewmodelSettings.Verbose then
+			warn(string.format("[Viewmodel] failed to equip %s: %s", weaponName, tostring(err)))
+		end
 		return false
 	end
 
