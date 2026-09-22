@@ -541,7 +541,11 @@ function gun:_buildGripJoint(model: Instance, handle: BasePart)
 	gripMotor.Part0 = rightArm
 	gripMotor.Part1 = handle
 	gripMotor.C0 = gripAttachment.CFrame * gripInfo.Position * gripInfo.Orientation
-	gripMotor.C1 = CFrame.new(0, 0, 0)
+
+	local c1Pos = gripInfo.PositionC1
+	local c1Ori = gripInfo.OrientationC1
+	local default = CFrame.new(0, 0, 0)
+	gripMotor.C1 = (c1Pos or default) * (c1Ori or default)
 	gripMotor.Parent = rightArm
 	table.insert(self.createdJoints, gripMotor)
 
@@ -551,6 +555,7 @@ function gun:_buildGripJoint(model: Instance, handle: BasePart)
 	-- connectLooseParts(model, handle, { [handle] = true })
 
 	logf("GunGrip attached at RightGripAttachment for", self.gunModel:GetFullName())
+	logf("GunGrip C0: ", gripMotor.C0)
 end
 
 -- The viewmodel is posed by the authored joints, so it needs the geometry those
