@@ -42,6 +42,7 @@ This is the quick ownership and public-API index. Private local functions are in
 | `PlayerUtil` | active count, give/remove weapons, teleport, map placement, ragdoll-return |
 | `RagdollHandler` | `apply`, `remove` |
 | `RaycastUtil` | `CastWithIgnore` repeated-name filter raycast |
+| `HitscanUtil` | shared `EffectiveSpread`, `ConeDirection`, `Cast`; server `IsFiniteVector`, `WithinCone`, `ValidateDirections` checks |
 | `Spring` | `new`, `Impulse`, `Destroy`; exposes spring position/target behavior |
 | `UIAnimations` | settings-aware UI sound and transition helpers |
 | `Typewriter` | `Typewrite`, `CountUp` |

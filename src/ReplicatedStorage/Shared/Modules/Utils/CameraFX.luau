@@ -11,31 +11,54 @@ local CameraFX = {}
 local camera = Workspace.CurrentCamera
 
 local RECOIL_STIFFNESS = 300
-local RECOIL_DAMPING = 15
+-- Damping ratio ~0.75: snaps back instead of wobbling. At 15 it was ~0.43.
+local RECOIL_DAMPING = 26
 
-local KICK_MULTIPLIER = 22
+-- Trimmed from 22: the kick used to be mostly cancelled (see undoIfStillOurs), so
+-- the old value never showed at full strength. Now it does.
+local KICK_MULTIPLIER = 16
 
 local springPosition = Vector3.zero
 local springVelocity = Vector3.zero
 local springActive = false
+local lastRecoilWrite: CFrame? = nil
+
+-- The camera's owner - FirstPersonRig during a round, Roblox's camera script
+-- otherwise - rewrites camera.CFrame from scratch every frame before this runs.
+-- Undoing last frame's offset on top of that fresh camera cancelled the kick and
+-- left only the frame-to-frame difference visible, which is why recoil read as a
+-- twitch. Undo only when nobody has rewritten the camera since our last write.
+local function undoIfStillOurs(lastWrite: CFrame?, offset: CFrame)
+	if lastWrite and camera.CFrame == lastWrite then
+		camera.CFrame = camera.CFrame * offset:Inverse()
+	end
+end
 
 local function updateRecoilSpring(dt)
-	camera.CFrame = camera.CFrame * CFrame.Angles(springPosition.X, springPosition.Y, springPosition.Z):Inverse()
+	undoIfStillOurs(lastRecoilWrite, CFrame.Angles(springPosition.X, springPosition.Y, springPosition.Z))
 
 	if springPosition.Magnitude < 0.001 and springVelocity.Magnitude < 0.001 then
 		springActive = false
 		springPosition = Vector3.zero
 		springVelocity = Vector3.zero
+		lastRecoilWrite = nil
 		RunService:UnbindFromRenderStep("CameraFXRecoil")
 		return
 	end
 
-	local force = -RECOIL_STIFFNESS * springPosition
-	local damping = -RECOIL_DAMPING * springVelocity
-	springVelocity = springVelocity + (force + damping) * dt
-	springPosition = springPosition + springVelocity * dt
+	-- substepped: a stiff spring stepped once per frame overshoots at low fps
+	local remaining = dt
+	while remaining > 0 do
+		local h = math.min(remaining, 1 / 120)
+		local force = -RECOIL_STIFFNESS * springPosition
+		local damping = -RECOIL_DAMPING * springVelocity
+		springVelocity = springVelocity + (force + damping) * h
+		springPosition = springPosition + springVelocity * h
+		remaining -= h
+	end
 
 	camera.CFrame = camera.CFrame * CFrame.Angles(springPosition.X, springPosition.Y, springPosition.Z)
+	lastRecoilWrite = camera.CFrame
 end
 
 function CameraFX.Recoil(kickDegrees)
@@ -58,6 +81,7 @@ end
 local activeShakes = {}
 local shakeLoopRunning = false
 local previousShakeCFrame = CFrame.new()
+local lastShakeWrite: CFrame? = nil
 
 local function updateShake(dt)
 	local total = CFrame.new()
@@ -78,12 +102,16 @@ local function updateShake(dt)
 		end
 	end
 
-	camera.CFrame = camera.CFrame * previousShakeCFrame:Inverse() * total
+	-- same cancellation bug as the recoil spring; see undoIfStillOurs
+	undoIfStillOurs(lastShakeWrite, previousShakeCFrame)
+	camera.CFrame = camera.CFrame * total
+	lastShakeWrite = camera.CFrame
 	previousShakeCFrame = total
 
 	if not next(activeShakes) then
 		shakeLoopRunning = false
 		previousShakeCFrame = CFrame.new()
+		lastShakeWrite = nil
 		RunService:UnbindFromRenderStep("CameraFXShake")
 	end
 end

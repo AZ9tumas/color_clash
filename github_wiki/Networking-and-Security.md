@@ -6,8 +6,8 @@ Remote wrapper modules under `Shared.Remotes` create their Instances when requir
 
 | Remote | Direction | Payload | Server/client behavior |
 | --- | --- | --- | --- |
-| `ToolConnections` | client → server | `toolName: string, mousePos: Vector3, isAiming: boolean` | `CombatServer` rate-limits and dispatches gun/melee |
-| `ShowBulletTracer` | server → all clients | `origin: Vector3, targetPos: Vector3` | cosmetic tracer and muzzle flash |
+| `ToolConnections` | client → server | `toolName: string, mousePos: Vector3, isAiming: boolean, eyeOrigin: Vector3?, directions: {Vector3}?` | `CombatServer` rate-limits; `WeaponServer` validates predicted pellet directions and resolves damage |
+| `ShowBulletTracer` | server → other clients (also shooter for legacy requests without directions) | `origin: Vector3, targetPos: Vector3, isLocalShot: boolean` | cosmetic tracer and muzzle flash; predicted shooter gets no echo |
 | `DamageVFX` | server → shooter | `position, damage, hitPart, hitNormal, killed` | hit marker, damage number, blood, melee impact, kill flash |
 | `PushRequest` | client → server | no arguments | validated push search and force |
 | `AimPitch` | client → server | `pitch: number` | finite check, clamp to `[-1.4, 1.4]`, store attribute |
@@ -66,6 +66,7 @@ The client may predict presentation, but it must not decide damage, rewards, own
 
 - Combat requires participation, Shoot phase, a configured item, server cooldown, and an actually equipped Tool.
 - Damage and friendly-fire decisions are server-owned.
+- Gun directions must be finite, near unit length, match the configured pellet count, and fit the weapon's hip/ADS spread cone. Accepted vectors are normalized before casting; malformed predictions are rejected. Eye origins are limited to 14 studs from the character's head.
 - Push repeats lifecycle, team, range, direction, and cooldown checks on the server.
 - Shop derives price and category from server config and uses server cash.
 - Daily reward state and reward contents are fully server-selected.
@@ -76,6 +77,7 @@ The client may predict presentation, but it must not decide damage, rewards, own
 ## Current hardening gaps
 
 - Gun ammo is local only; the server does not reject firing beyond a magazine/reload model.
+- The client rolls spread for immediate tracers. Cone validation bounds deviation but cannot prove random sampling: a modified client can choose the cone center. This is not an aimbot detector.
 - Combat target `mousePos` is client-provided. Range is bounded, but camera-to-target plausibility is not validated.
 - Movement speed is accepted from the client up to a global maximum, without strict state-to-speed validation.
 - Settings validate the name but not the type or configured slider bounds.

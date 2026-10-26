@@ -12,10 +12,12 @@ local MainHudController = require(Shared.UIControllers.MainHudController)
 local RaycastUtil = require(Shared.Modules.Utils.RaycastUtil)
 local CameraFX = require(Shared.Modules.Utils.CameraFX)
 local FXUtil = require(Shared.Modules.Utils.FXUtil)
+local HitscanUtil = require(Shared.Modules.Utils.HitscanUtil)
 local FirstPersonRig = require(Shared.Classes.FirstPersonRig)
 local Viewmodel = require(Shared.Classes.Viewmodel)
 
 local SoundService = game:GetService("SoundService")
+local Debris = game:GetService("Debris")
 local FXConfig = require(Shared.Modules.Core.FXConfig)
 
 local function log(message, ...)
@@ -51,7 +53,7 @@ function GunHandler.New(tool: Tool?)
 
 		_ammo = gunData.MaxAmmo,
 		fireRate = gunData.Cooldown,
-		fireCooldown = 0,
+		nextShotAt = 0,
 
 		isEquipped = false,
 		isShooting = false,
@@ -66,6 +68,58 @@ function GunHandler.New(tool: Tool?)
 	}, gun)
 
 	return self
+end
+
+-- Local gunshot. The server plays FireSFX on the third-person Handle so everyone
+-- else hears the shot, but for the shooter that copy arrives a round trip late and
+-- spatialised from a hidden model. So the shooter's own copy is muted locally and
+-- replaced by an instant, non-spatial one. Volume set on the client stays local:
+-- the server only ever calls :Play() on that sound, it never writes Volume.
+-- Optional extra layers are played if they exist on the Handle.
+local FIRE_LAYERS = { "FireSFX", "FireMech", "FireTail", "FireBass" }
+local LOCAL_SHOT_GAIN = 1.15
+local SHOT_PITCH_JITTER = 0.04
+
+function gun:_prepareLocalAudio()
+	self._fireLayers = {}
+	self._mutedVolumes = {}
+
+	local handle = self.tool:FindFirstChild("Handle")
+	if not handle then return end
+
+	for _, name in ipairs(FIRE_LAYERS) do
+		local sound = handle:FindFirstChild(name)
+		if sound and sound:IsA("Sound") then
+			table.insert(self._fireLayers, sound)
+			if name == "FireSFX" then
+				self._mutedVolumes[sound] = sound.Volume
+				sound.Volume = 0
+			end
+		end
+	end
+end
+
+function gun:_restoreLocalAudio()
+	for sound, volume in pairs(self._mutedVolumes or {}) do
+		if sound.Parent then sound.Volume = volume end
+	end
+	self._mutedVolumes = {}
+	self._fireLayers = {}
+end
+
+function gun:_playLocalShot()
+	for _, source in ipairs(self._fireLayers or {}) do
+		local shot = source:Clone()
+		shot.Playing = false
+		shot.Volume = (self._mutedVolumes[source] or source.Volume) * LOCAL_SHOT_GAIN
+		shot.PlaybackSpeed = source.PlaybackSpeed * (1 + (math.random() * 2 - 1) * SHOT_PITCH_JITTER)
+		-- parented outside any part, so it plays flat in the player's ears
+		shot.Parent = SoundService
+		shot:Play()
+
+		local length = shot.TimeLength > 0 and shot.TimeLength or 2
+		Debris:AddItem(shot, length / math.max(shot.PlaybackSpeed, 0.1) + 0.25)
+	end
 end
 
 local function playHandleSound(tool, name)
@@ -100,14 +154,18 @@ function gun:getTargetPosition()
 end
 
 function gun:_fireOnce()
+	local now = os.clock()
+	if now < self.nextShotAt then return false end
 	if self._ammo <= 0 then
 		self:Reload()
 		return false
 	end
 
+	self.nextShotAt = now + self.fireRate
 	self._ammo -= 1
 	self:updateUI()
 	CrosshairController.AddBloom((self.Properties.Spread or 5) * 1.5 + 5)
+	self:_playLocalShot()
 
 	local recoil = self.Properties.Recoil or { Pitch = 1.5, Yaw = 0.5 }
 	local steady = self.isAiming and 0.5 or 1
@@ -123,11 +181,8 @@ function gun:_fireOnce()
 	))
 	if self.viewmodel then
 
-		self.viewmodel:applyRecoilImpulse(Vector3.new(
-			recoil.Pitch * 10 * steady,
-			recoil.Yaw * 8 * steady * (math.random() * 2 - 1),
-			0
-		))
+		-- procedural kick on the gun itself, scaled by this weapon's recoil
+		self.viewmodel:Kick(recoil.Pitch, recoil.Yaw, self.isAiming)
 		self.viewmodel:PlayShoot()
 	end
 	CameraFX.Recoil(Vector3.new(
@@ -136,7 +191,10 @@ function gun:_fireOnce()
 		0
 	))
 	CameraFX.Shake(Vector3.new(recoil.Pitch * 0.3, 0, recoil.Pitch * 0.25), 0.18, 0.75)
-	CameraFX.FirePulse((self.Properties.Shake and self.Properties.Shake.Intensity or 1) * 2.5)
+	-- full-screen blur on every shot reads as smear rather than impact; opt-in only
+	if FXConfig.FireBlur then
+		CameraFX.FirePulse((self.Properties.Shake and self.Properties.Shake.Intensity or 1) * 2.5)
+	end
 
 	local intensity = self.Properties.Shake and self.Properties.Shake.Intensity or 1
 
@@ -155,7 +213,30 @@ function gun:_fireOnce()
 	-- well as the endpoint keeps its raycast identical to the one the crosshair
 	-- described; casting from the muzzle instead introduces parallax error.
 	local origin, target = self:getAimRay()
-	ToolConnections:FireServer(self.tool.Name, target, self.isAiming, origin)
+
+	-- Spread is rolled here rather than on the server, so the tracer can leave the
+	-- muzzle this frame instead of after a round trip. The server checks every
+	-- direction against the weapon's spread cone and casts the same rays for damage.
+	local directions = {}
+	local aimDirection = target - origin
+	if aimDirection.Magnitude > 0.01 then
+		aimDirection = aimDirection.Unit
+		local spread = HitscanUtil.EffectiveSpread(self.Properties, self.isAiming)
+		local range = self.Properties.Range or 1000
+		local muzzle = (self.viewmodel and self.viewmodel:GetMuzzlePosition())
+			or FXUtil.GetMuzzlePosition(self.tool)
+			or origin
+
+		for i = 1, self.Properties.Pellets or 1 do
+			local direction = HitscanUtil.ConeDirection(aimDirection, spread)
+			directions[i] = direction
+
+			local result = HitscanUtil.Cast(origin, direction, range, player.Character)
+			FXUtil.BulletTracer(muzzle, result and result.Position or origin + direction * range)
+		end
+	end
+
+	ToolConnections:FireServer(self.tool.Name, target, self.isAiming, origin, directions)
 	return true
 end
 
@@ -170,29 +251,23 @@ function gun:shoot()
 	end
 
 	if not self.Properties.AutoFire then
-		if self.fireCooldown <= 0 then
-			self:_fireOnce()
-			self.fireCooldown = self.fireRate
-			task.delay(self.fireRate, function()
-				self.fireCooldown = 0
-			end)
-		end
+		self:_fireOnce()
 		return
 	end
 
 	if self.isShooting then return end
 	self.isShooting = true
-	self.fireCooldown = 0
+	-- Fire on the input frame. The deadline survives trigger release/repress,
+	-- so tapping an automatic cannot predict shots the server will rate-limit.
+	self:_fireOnce()
 
-	self.continuousFireConn = RunService.Heartbeat:Connect(function(dt)
+	self.continuousFireConn = RunService.Heartbeat:Connect(function()
 		if not self.isEquipped or self.isReloading then
 			self:stopShoot()
 			return
 		end
 
-		self.fireCooldown -= dt
-		if self.fireCooldown <= 0 then
-			self.fireCooldown = self.fireRate
+		if os.clock() >= self.nextShotAt then
 			if not self:_fireOnce() then
 				self:stopShoot()
 			end
@@ -273,6 +348,7 @@ end
 
 function gun:Equip()
 	self.isEquipped = true
+	self:_prepareLocalAudio()
 	self.cancelReload = false
 
 	self.viewmodel = Viewmodel.GetShared()
@@ -292,6 +368,7 @@ end
 
 function gun:Unequip()
 	self.isEquipped = false
+	self:_restoreLocalAudio()
 	self.cancelReload = true
 
 	self:stopShoot()

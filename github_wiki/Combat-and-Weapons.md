@@ -26,36 +26,36 @@ sequenceDiagram
 
     I->>GC: MouseButton1
     GC->>GH: shoot()
-    GH->>GH: ammo, cooldown, recoil, local FX
-    GH->>CR: FireServer(name, targetPosition, isAiming)
+    GH->>GH: ammo, cooldown, recoil, muzzle FX, spread and local tracers
+    GH->>CR: FireServer(name, targetPosition, isAiming, eyeOrigin, directions)
     CR->>CS: request
     CS->>CS: playing, Shoot phase, item, cooldown
     CS->>WS: FireHitscan(...)
-    WS->>WS: spread, raycast, headshot, damage
+    WS->>WS: validate directions, raycast, headshot, damage
     WS-->>CC: DamageVFX for shooter
-    WS-->>CC: ShowBulletTracer for all clients
+    WS-->>CC: ShowBulletTracer for other players
 ```
 
 ## Client gun behavior
 
-`GunHandler` owns per-Tool local ammo, semi/automatic cadence, ADS, reload, crosshair bloom, movement animations, camera effects, muzzle flash, shell ejection, and remote requests.
+`GunHandler` owns per-Tool local ammo, semi/automatic cadence, ADS, reload, crosshair bloom, movement animations, camera effects, local shot audio, muzzle flash, shell ejection, predicted tracers, and remote requests. `HitscanUtil` supplies shared spread and raycast rules. Tracers start at the viewmodel muzzle immediately; their endpoints come from eye-origin raycasts. Damage indicators wait for the server.
 
 - Semi-automatic weapons use `Cooldown` as a local lockout.
-- Automatic weapons run on `Heartbeat` until input ends, ammo empties, reload starts, or the Tool is unequipped.
+- Automatic weapons fire immediately on input, then continue on `Heartbeat` until input ends, ammo empties, reload starts, or the Tool is unequipped. A monotonic deadline preserves cooldown across trigger release/repress.
 - Empty fire plays `DryFire` and begins reload.
 - `ReloadPerShell` loops one shell per `ReloadTime`; other guns refill after one reload duration.
-- ADS sets `AimFOV`, enables the light black vignette, applies a `0.55` movement multiplier, and uses the item’s spread multiplier server-side.
+- ADS sets `AimFOV`, enables the light black vignette, applies a `0.55` movement multiplier, and uses the same spread multiplier on client and server.
 
 ## Server gun behavior
 
-`CombatServer` accepts `ToolConnections(toolName, mousePos, isAiming)` only when:
+`CombatServer` accepts `ToolConnections(toolName, mousePos, isAiming, eyeOrigin, directions)` only when:
 
 - `player.IsPlaying` is true;
 - `Workspace.ArenaPhase == "Shoot"`;
 - `Items[toolName]` exists;
-- the server cooldown for that player and weapon has elapsed.
+- the server cooldown for that player and weapon has elapsed, with up to 50 ms of arrival jitter allowance. Early shots advance the existing deadline, so repeated early arrivals cannot increase the sustained fire rate.
 
-`WeaponServer.FireHitscan()` then verifies the named Tool is equipped in the character and has a handle. It plays server-visible animation/audio, obtains the muzzle origin, applies spread and range, raycasts while skipping repair/debris/base geometry, doubles damage for a part named exactly `Head`, and broadcasts tracers.
+`WeaponServer.FireHitscan()` verifies the named Tool is equipped and has a handle, checks finite aim data and the eye offset, then validates every predicted pellet against the configured spread cone. It normalizes accepted directions, casts from the eye using shared filters and server-owned range, doubles damage for a part named exactly `Head`, and broadcasts tracers to other players. The shooter gets hit feedback only after server resolution. Invalid supplied directions reject the shot; legacy requests with no directions still roll spread on the server and receive a tracer.
 
 The server currently does not maintain authoritative ammunition. See [Known Limitations](Known-Limitations) before changing competitive or anti-cheat expectations.
 
@@ -108,12 +108,12 @@ Additional ranged fields:
 | `MaxAmmo` | Classifies the item as a gun and sets local magazine size |
 | `ReloadTime` | Full-mag duration or per-shell duration |
 | `ReloadPerShell` | Enables shell-by-shell reload |
-| `Spread` | Server jitter scale |
+| `Spread` | Shared spread cone half-angle in milliradians |
 | `Pellets` | Rays per shot; defaults to 1 |
 | `AutoFire` | Hold-to-fire behavior |
 | `Recoil.Pitch/Yaw` | Permanent and visual recoil inputs |
 | `Aim.FOV` | ADS target FOV |
-| `Aim.SpreadMultiplier` | Server spread multiplier while aiming |
+| `Aim.SpreadMultiplier` | Shared spread multiplier while aiming |
 | `Animations.Shoot/Reload/Idle/Walk/Sprint` | Full animation URI strings |
 
 ## Current weapon roster

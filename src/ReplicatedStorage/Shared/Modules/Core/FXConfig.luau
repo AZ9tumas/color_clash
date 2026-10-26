@@ -11,6 +11,10 @@ FXConfig.GunDebug = false
 -- console is reserved for the viewmodel animation logs. Flip to diagnose.
 FXConfig.Logging = false
 
+-- Full-screen blur pulse on every gunshot. Off: it smears the picture rather than
+-- selling impact. Recoil and the viewmodel kick carry the punch instead.
+FXConfig.FireBlur = false
+
 FXConfig.UI = {
 	Enabled = true,
 	Click = "UIClick",

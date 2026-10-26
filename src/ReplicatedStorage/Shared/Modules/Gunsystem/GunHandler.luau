@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local KeyframeSequenceProvider = game:GetService("KeyframeSequenceProvider")
+local RunService = game:GetService("RunService")
 
 local gunInfo = require(script.Parent.GunInfo)
 local viewmodelHandler = require(script.Parent.ViewModelHandler)
@@ -99,12 +100,20 @@ local gun = {}
 local controllers = setmetatable({}, {__mode = "k"})
 local VIEWMODEL_COLLISION_GROUP = "Viewmodel"
 
--- KeyframeSequences authored in Studio have no AnimationId, so they have to be
--- registered per client before an Animator can load them. Registration is
--- expensive, so cache the content id against the sequence instance.
+-- Published sequences use permanent group-owned assets in Studio and live games.
+-- Unpublished drafts can still be previewed with temporary Studio-only IDs.
 local registeredSequences = setmetatable({}, {__mode = "k"})
 
 local function registerSequence(sequence: KeyframeSequence): string?
+	local publishedId = sequence:GetAttribute("PublishedAnimationId")
+	if type(publishedId) == "string" and publishedId:match("^rbxassetid://[1-9]%d*$") then
+		return publishedId
+	end
+	if not RunService:IsStudio() then
+		warn(string.format("[ViewmodelAnimation] Publish %s before using it in a live game", sequence:GetFullName()))
+		return nil
+	end
+
 	local cached = registeredSequences[sequence]
 	if cached then return cached end
 
@@ -496,7 +505,10 @@ function gun:_buildAuthoredJoints(model: Instance, root: BasePart, handle: BaseP
 		local motor = Instance.new("Motor6D")
 		motor.Name = config.Name
 		motor.C0 = config:GetAttribute("C0") or CFrame.new()
-		motor.C1 = config:GetAttribute("C1") or CFrame.new()
+		motor.C1 = (not self.usingAuthoredGeometry and config:GetAttribute("ToolC1"))
+			or config:GetAttribute("C1") or CFrame.new()
+		-- Tool parts welded to the Handle must not also be driven by a second motor.
+		motor.Enabled = self.usingAuthoredGeometry or config:GetAttribute("UseToolWeld") ~= true
 		motor.Part1 = entry.part1
 
 		-- Root-anchored joints are what the reload sequence drives directly;
@@ -577,6 +589,17 @@ function gun:Equip()
 	local geometry, authoredGeometry = self:_geometrySource()
 	self.clonedGun = geometry:Clone()
 	self.usingAuthoredGeometry = authoredGeometry
+
+	-- Match shipping geometry to the scale of the authored weapon pose.
+	local scale = not authoredGeometry and self.dataFolder and self.dataFolder:GetAttribute("ToolViewmodelScale")
+	if type(scale) == "number" and scale > 0 and scale ~= 1 then
+		local wrapper = Instance.new("Model")
+		self.clonedGun.Parent = wrapper
+		wrapper.PrimaryPart = findPartNamed(self.clonedGun, "Handle")
+		wrapper:ScaleTo(scale)
+		self.clonedGun.Parent = nil
+		wrapper:Destroy()
+	end
 
 	for _, v in ipairs(self.clonedGun:GetDescendants()) do
 		if v:IsA("BasePart") then

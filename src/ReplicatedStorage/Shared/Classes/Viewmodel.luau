@@ -139,6 +139,12 @@ function Viewmodel:applyRecoilImpulse(impulse: Vector3)
 	self.renderer:applyRecoilImpulse(impulse)
 end
 
+-- Procedural recoil on the viewmodel gun. pitch / yaw are the weapon's Items.Recoil.
+function Viewmodel:Kick(pitch: number, yaw: number, aiming: boolean?)
+	if self.destroyed then return end
+	self.renderer:Kick(pitch, yaw, aiming)
+end
+
 function Viewmodel:StartADS()
 	if self.destroyed then return end
 	self.renderer:StartADS(Vector3.zero)

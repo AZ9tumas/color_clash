@@ -6,6 +6,16 @@ local Modules = Shared.Modules.Gunsystem
 local Assets = Shared.Assets
 local SpringHandler = require(Modules.SpringModule)
 local ViewmodelSettings = require(Modules.ViewmodelSettings)
+-- Required defensively: the Rojo plugin has dropped individual files on sync before,
+-- and a missing module must cost the procedural motion, not the whole viewmodel.
+local ViewmodelMotion = nil
+do
+	local motionModule = Modules:FindFirstChild("ViewmodelMotion")
+	if motionModule then
+		local ok, result = pcall(require, motionModule)
+		if ok then ViewmodelMotion = result end
+	end
+end
 
 local handler = {}
 local viewmodel = {}
@@ -13,6 +23,12 @@ local viewmodel = {}
 local VIEWMODEL_DEFAULT_POS = Vector3.new(0, 0, 0)
 local VIEWMODEL_COLLISION_GROUP = "Viewmodel"
 local CHARACTER_MESH_MARKER = "ViewmodelCharacterMesh"
+
+-- Runs after every camera writer: FirstPersonRig at Camera+2, CameraFX shake at +5
+-- and recoil at +10. The old plain RenderStepped connection had no guaranteed order
+-- against those, which let the gun jitter against the camera it is glued to.
+local VIEWMODEL_RENDER_PRIORITY = Enum.RenderPriority.Camera.Value + 20
+local renderSerial = 0
 
 -- AnimationTrack:Destroy() does NOT stop playback, and destroying straight after
 -- Stop() cancels the fade - the track then plays forever on the shared Animator,
@@ -139,7 +155,8 @@ function handler.new(_viewmodelOffset: Vector3)
 
 	local newmodel = {
 		model = model,
-		rbxConn = nil,
+		renderBind = nil,
+		motion = (ViewmodelMotion and ViewmodelSettings.Motion) and ViewmodelMotion.new(ViewmodelSettings.Motion) or nil,
 		baseAnimationTrack = nil,
 
 		-- viewmodel recoil
@@ -245,6 +262,12 @@ function viewmodel:applyRecoilImpulse(impulse)
 	self.isSpringActive = true
 end
 
+-- Procedural recoil on the gun itself. pitch / yaw are the weapon's Items.Recoil.
+function viewmodel:Kick(pitch: number, yaw: number, aiming: boolean?)
+	if not ViewmodelSettings.MotionEnabled or not self.motion then return end
+	self.motion:Kick(pitch, yaw, aiming)
+end
+
 function viewmodel:StartADS(adsOffset)
 	if ViewmodelSettings.SpringsEnabled then
 		self.offsetSpring.Target = adsOffset
@@ -274,7 +297,7 @@ function viewmodel:ResetAnimationPose()
 end
 
 function viewmodel:Enable()
-	if not ViewmodelSettings.AnimationsEnabled and not self.rbxConn then
+	if not ViewmodelSettings.AnimationsEnabled and not self.renderBind then
 		self:ResetAnimationPose()
 	end
 
@@ -283,9 +306,13 @@ function viewmodel:Enable()
 		self.model.Parent = camera
 		self:_ensureBaseAnimation()
 	end
-	if self.rbxConn then return end
+	if self.renderBind then return end
 
-	self.rbxConn = RunService.RenderStepped:Connect(function(dt)
+	if self.motion then self.motion:Reset() end
+
+	renderSerial += 1
+	self.renderBind = "ViewmodelRender_" .. renderSerial
+	RunService:BindToRenderStep(self.renderBind, VIEWMODEL_RENDER_PRIORITY, function(dt)
 		camera = workspace.CurrentCamera
 		if not camera then return end
 
@@ -294,7 +321,14 @@ function viewmodel:Enable()
 			self:_ensureBaseAnimation()
 		end
 
-		local finalCFrame = camera.CFrame * ViewmodelSettings.PositionOffset
+		local cameraCFrame = camera.CFrame
+		local motionCFrame = CFrame.identity
+		if ViewmodelSettings.MotionEnabled and self.motion then
+			motionCFrame = self.motion:Update(dt, cameraCFrame)
+		end
+
+		-- motion is applied in camera space, before the rig offset
+		local finalCFrame = cameraCFrame * motionCFrame * ViewmodelSettings.PositionOffset
 
 		if ViewmodelSettings.SpringsEnabled then
 			if self.isSpringActive then
@@ -324,13 +358,14 @@ function viewmodel:Enable()
 end
 
 function viewmodel:Disable()
-	if not self.rbxConn then return end
+	if not self.renderBind then return end
 	if not self.model then return end
 
 	self.model.Parent = ReplicatedStorage
 
-	self.rbxConn:Disconnect()
-	self.rbxConn = nil
+	RunService:UnbindFromRenderStep(self.renderBind)
+	self.renderBind = nil
+	if self.motion then self.motion:Reset() end
 
 	self.isSpringActive = false
 	self.springPosition = Vector3.new()

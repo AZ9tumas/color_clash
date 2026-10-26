@@ -46,6 +46,39 @@ return {
 	-- above are the only thing that reaches the console.
 	Verbose = true,
 
+	-- Procedural motion on top of the animations: recoil kick, look sway, movement
+	-- bob, landing dip. Kick values scale with each weapon's Items.Recoil numbers.
+	-- Set MotionEnabled false to glue the gun rigidly to the camera again.
+	MotionEnabled = true,
+	Motion = {
+		Pivot = Vector3.new(0.5, -0.6, -1.2), -- camera-space point the gun rotates about
+
+		-- recoil kick (per unit of Items.Recoil.Pitch / Yaw)
+		KickFrequency = 9, KickDamping = 0.6,
+		KickBack = 4.4, KickUp = 1.2, KickSide = 0.6,
+		KickPitch = 1.7, KickYaw = 0.9, KickRoll = 0.7,
+		KickMaxMove = Vector3.new(0.15, 0.15, 0.6),
+		KickMaxTurn = Vector3.new(0.35, 0.15, 0.2),
+		AimKickScale = 0.55,
+
+		-- look sway
+		SwayFrequency = 6, SwayDamping = 0.85,
+		SwayTurn = 0.02, SwayMaxTurn = Vector3.new(0.12, 0.12, 0.08),
+		SwayShift = 0.03, SwayMaxShift = Vector3.new(0.12, 0.08, 0),
+		AimSwayScale = 0.35,
+
+		-- movement bob
+		BobFrequency = 1.8, BobReferenceSpeed = 16, BobBlend = 10,
+		BobSide = 0.035, BobVertical = 0.03, BobRoll = 0.012,
+		SprintBobScale = 1.4, SprintBobRate = 1.3, AimBobScale = 0.25,
+
+		-- landing dip
+		LandFrequency = 6, LandDamping = 0.55, LandKick = 0.25, LandMaxFallSpeed = 60,
+
+		-- idle breath
+		BreathRate = 0.25, BreathAmount = 0.008,
+	},
+
 	AnimationIds = {
 		ViewmodelLoad = "rbxassetid://79466363432702",
 		WeaponAction = "rbxassetid://83198374002696",

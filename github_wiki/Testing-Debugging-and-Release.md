@@ -1,6 +1,6 @@
 # Testing, Debugging, and Release
 
-The repository has vendored package tests but no game-level automated test suite or CI configuration. `test.luau` is an exporter, not a test runner. Game verification is therefore primarily Studio playtesting plus static review.
+The repository has vendored package tests and a focused Studio check in `tests/hitscan_validation.luau`, but no game-level test runner or CI configuration. `test.luau` is an exporter, not a test runner. Game verification is primarily Studio playtesting plus static review.
 
 ## Minimum local validation
 
@@ -38,6 +38,8 @@ The repository has vendored package tests but no game-level automated test suite
 - Test Pistol, an automatic rifle/SMG, Shotgun per-shell reload, and Sniper.
 - Verify ammo UI, dry fire, semi/auto cadence, reload cancellation, equip during reload, and weapon swap.
 - Verify hip fire, ADS FOV, vignette, movement slow, recoil layers, muzzle flash, sound, shells, and tracers.
+- Run `tests/hitscan_validation.luau` in Studio after syncing. It checks 120,000 valid directions across all guns in hip fire and ADS, plus malformed vectors, incorrect pellet counts, and out-of-cone directions.
+- With latency present, verify local tracers precede server damage confirmation, shotgun draws eight pellets, the shooter gets no duplicate tracer, and other players still receive tracers. Reject malformed shot directions without damage or a replacement tracer.
 - Verify body shot, headshot, friendly-fire rejection, damage number, kill feed, reward, and death screen.
 - Test Knife, Axe, and Bat families for animation, sound, cooldown, overlap hit, and impact feedback.
 - Repeat representative gun and melee tests on both R6 and R15.
