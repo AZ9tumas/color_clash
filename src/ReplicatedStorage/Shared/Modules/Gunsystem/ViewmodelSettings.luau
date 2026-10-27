@@ -77,6 +77,10 @@ return {
 
 		-- idle breath
 		BreathRate = 0.25, BreathAmount = 0.008,
+
+		-- draw (CombatConfig.QuickSwap): the gun starts this far down/back and
+		-- tilted (radians), easing into place over the gun's EquipTime
+		DrawDrop = 0.7, DrawPullBack = 0.25, DrawTilt = 0.7, DrawRoll = 0.3,
 	},
 
 	AnimationIds = {

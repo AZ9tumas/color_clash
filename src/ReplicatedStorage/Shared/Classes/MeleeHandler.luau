@@ -60,20 +60,21 @@ end
 -- swingOnly is used for the viewmodel: its resting pose comes from the melee hold
 -- (ViewmodelSettings.AnimationIds.MeleeHold) at Action2, and the movement set sits
 -- at Action3, so loading it there would mask the hold entirely. The character still
--- gets the full set, which is what replicates to other players.
+-- gets the full set on R6. R15 keeps its avatar locomotion and uses its own swing.
 local function loadTrackSet(animator, anims, rigTypeName, into, label, swingOnly)
 	if not animator or not anims then return end
+	local useR6Locomotion = not swingOnly and rigTypeName == "R6"
 
 	local ok, err = pcall(function()
-		if anims.Idle and not swingOnly then
+		if anims.Idle and useR6Locomotion then
 			into.Idle = loadTrack(animator, anims.Idle, Enum.AnimationPriority.Action3, "MeleeIdle")
 			into.Idle.Looped = true
 		end
-		if anims.Walk and not swingOnly then
+		if anims.Walk and useR6Locomotion then
 			into.Walk = loadTrack(animator, anims.Walk, Enum.AnimationPriority.Action3, "MeleeWalk")
 			into.Walk.Looped = true
 		end
-		if anims.Sprint and not swingOnly then
+		if anims.Sprint and useR6Locomotion then
 			into.Sprint = loadTrack(animator, anims.Sprint, Enum.AnimationPriority.Action3, "MeleeSprint")
 			into.Sprint.Looped = true
 		end

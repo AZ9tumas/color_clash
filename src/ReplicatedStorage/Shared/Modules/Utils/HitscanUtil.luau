@@ -30,6 +30,55 @@ function HitscanUtil.EffectiveSpread(data, isAiming: boolean?): number
 	return spread
 end
 
+-- Items.Handling.Spread with every missing field filled in, cached per weapon.
+-- Without a Handling table the gun keeps its plain hip/aim Spread.
+local spreadProfiles = {}
+
+function HitscanUtil.SpreadProfile(data)
+	local profile = spreadProfiles[data]
+	if profile then return profile end
+
+	local authored = data.Handling and data.Handling.Spread or {}
+	profile = {
+		Hip = authored.Hip or data.Spread or 0,
+		Aim = authored.Aim or HitscanUtil.EffectiveSpread(data, true),
+		Move = authored.Move or 0,
+		Air = authored.Air or 0,
+		Slide = authored.Slide or 0,
+		AimPenalty = authored.AimPenalty or 0.5,
+		Bloom = authored.Bloom or 0,
+		MaxBloom = authored.MaxBloom or 0,
+		BloomRecovery = authored.BloomRecovery or 30,
+		BloomRecoveryDelay = authored.BloomRecoveryDelay or 0.25,
+	}
+	spreadProfiles[data] = profile
+	return profile
+end
+
+-- The widest cone the client's handling can produce for this gun. The server
+-- cannot see the shooter's exact movement state at the moment of firing, so
+-- under GunHandling it accepts any direction inside this bound.
+function HitscanUtil.SpreadBound(data): number
+	local s = HitscanUtil.SpreadProfile(data)
+	return math.max(s.Hip, s.Aim) + s.Move + math.max(s.Air, s.Slide) + s.MaxBloom
+end
+
+-- Damage for one pellet under GunHandling: range falloff, then the gun's
+-- headshot multiplier. Rounded so hit numbers stay whole.
+function HitscanUtil.HandlingDamage(data, distance: number, isHeadshot: boolean): number
+	local handling = data.Handling or {}
+	local multiplier = 1
+	local falloff = handling.Falloff
+	if falloff then
+		local t = math.clamp((distance - falloff.Start) / math.max(falloff.End - falloff.Start, 1e-3), 0, 1)
+		multiplier = 1 + (falloff.Min - 1) * t
+	end
+	if isHeadshot then
+		multiplier *= handling.Headshot or 2
+	end
+	return math.max(1, math.floor(data.Damage * multiplier + 0.5))
+end
+
 function HitscanUtil.ConeDirection(direction: Vector3, spread: number): Vector3
 	if spread <= 0 then return direction end
 
@@ -67,12 +116,20 @@ function HitscanUtil.ValidateDirections(directions, aimDirection: Vector3, sprea
 end
 
 function HitscanUtil.Cast(origin: Vector3, direction: Vector3, range: number, character: Model?)
-	local ignore = {}
-	if character then table.insert(ignore, character) end
+	return HitscanUtil.CastIgnoring(origin, direction, range, character and { character } or {})
+end
+
+-- Like Cast, but skips every instance in `ignore` as well as the usual debris.
+function HitscanUtil.CastIgnoring(origin: Vector3, direction: Vector3, range: number, ignore: { Instance })
+	ignore = table.clone(ignore)
 	local debrisFolder = Workspace:FindFirstChild("WallDebrisFolder")
 	if debrisFolder then table.insert(ignore, debrisFolder) end
 	local baseModel = Workspace:FindFirstChild("Base")
 	if baseModel then table.insert(ignore, baseModel) end
+	-- Grenades must collide with the world; CanQuery=false alone cannot keep
+	-- collidable parts out of raycasts.
+	local grenades = Workspace:FindFirstChild("GrenadeProjectiles")
+	if grenades then table.insert(ignore, grenades) end
 
 	return RaycastUtil.CastWithIgnore(origin, direction, range, ignore, IGNORE_NAMES)
 end

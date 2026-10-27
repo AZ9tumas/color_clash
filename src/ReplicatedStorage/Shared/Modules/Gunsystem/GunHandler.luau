@@ -335,10 +335,20 @@ function gun:_loadTrack(source, trackName: string): AnimationTrack?
 	return track
 end
 
+-- Where the hold and reload sequences come from. A weapon whose own authored
+-- animations do not frame in first person can borrow another weapon's
+-- (WeaponViewmodelData.<Weapon>:AnimationsFrom); its Handle joint's ToolC1 is
+-- then fitted to that weapon's poses. The Shotgun borrows the AR's.
+function gun:_animationFolder()
+	local borrowed = self.dataFolder and self.dataFolder:GetAttribute("AnimationsFrom")
+	return (type(borrowed) == "string" and weaponDataFolder(borrowed)) or self.dataFolder
+end
+
 -- Authored KeyframeSequences win over uploaded Tool animations, which win over
 -- the shared fallback id in GunInfo.
 function gun:_holdSource()
-	local sequence = self.dataFolder and self.dataFolder:FindFirstChild("Hold")
+	local holdFolder = self:_animationFolder()
+	local sequence = holdFolder and holdFolder:FindFirstChild("Hold")
 	if sequence and sequence:IsA("KeyframeSequence") then return sequence end
 
 	-- Animations live on the Tool asset, never on the authored WeaponModel, so
@@ -356,7 +366,8 @@ function gun:_holdSource()
 end
 
 function gun:_reloadSource()
-	local sequence = self.dataFolder and self.dataFolder:FindFirstChild("Reload")
+	local reloadFolder = self:_animationFolder()
+	local sequence = reloadFolder and reloadFolder:FindFirstChild("Reload")
 	if sequence and sequence:IsA("KeyframeSequence") then return sequence end
 
 	local source = self.gunModel
@@ -431,8 +442,9 @@ function gun:PlayReloadAnimation(duration: number?)
 	-- Length reads 0 until the asset resolves; the exporter stamps the authored
 	-- duration on the weapon folder for exactly this case.
 	local length = track.Length
-	if length <= 0 and self.dataFolder then
-		length = self.dataFolder:GetAttribute("ReloadLength") or 0
+	local reloadFolder = self:_animationFolder()
+	if length <= 0 and reloadFolder then
+		length = reloadFolder:GetAttribute("ReloadLength") or 0
 	end
 	if duration and duration > 0 and length > 0 then
 		track:AdjustSpeed(length / duration)
@@ -441,7 +453,7 @@ function gun:PlayReloadAnimation(duration: number?)
 	logf(string.format(
 		"[ViewmodelAnimation] Playing reload for %s | source=%s",
 		self.gunModel.Name,
-		self.dataFolder and self.dataFolder:FindFirstChild("Reload") and "KeyframeSequence" or "Animation"
+		reloadFolder and reloadFolder:FindFirstChild("Reload") and "KeyframeSequence" or "Animation"
 	))
 	return true, "PLAYING"
 end

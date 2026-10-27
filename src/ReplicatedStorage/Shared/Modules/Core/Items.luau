@@ -102,12 +102,29 @@ local Items: Types.WeaponCatalog = {
 		}
 	},
 
+	-- Handling is only read while CombatConfig.GunHandling / QuickSwap are on.
+	-- Spread values are milliradians (as Spread): Hip/Aim are the resting cone,
+	-- Move is added in full at sprint speed, Air while airborne, Slide while
+	-- sliding (AimPenalty scales those three while aiming), and each shot adds
+	-- Bloom up to MaxBloom, recovering BloomRecovery per second. Falloff scales
+	-- damage from 1 at Start studs to Min at End. Recoil.Pattern is the aim kick
+	-- in degrees { up, right } per shot of a spray (the last step repeats with
+	-- Wander); the aim drifts back at RecoveryRate deg/s once the trigger has
+	-- rested RecoveryDelay seconds.
 	["Pistol"] = {
 		Damage = 35, Cooldown = 0.2, Range = 500, MaxAmmo = 15, ReloadTime = 2.9, Spread = 0,
 		Grip = CFrame.new(0.00197005272, -0.199962825, 0.00336956978, 1, 3.52563291e-07, -3.02863191e-06, -3.52560448e-07, 1, 9.36901358e-07, 3.02863214e-06, -9.36900278e-07, 1),
 		Shake = { Intensity = 1.5, Decay = 18 },
 		Recoil = { Pitch = 4.2, Yaw = 1.1 },
 		Aim = { FOV = 65, SpreadMultiplier = 0.4 },
+		Handling = {
+			Spread = { Hip = 3, Aim = 0.5, Move = 6, Air = 18, Slide = 6, AimPenalty = 0.5, Bloom = 5, MaxBloom = 20, BloomRecovery = 60 },
+			Falloff = { Start = 60, End = 160, Min = 0.7 },
+			Headshot = 2,
+			Recoil = { Pattern = { { 1.4, 0.15 } }, Wander = 0.3, RecoveryDelay = 0.12, RecoveryRate = 14 },
+			TacticalReloadTime = 2.3,
+			EquipTime = 0.3,
+		},
 
 		Animations = { Shoot = "rbxassetid://86304083830215", Reload = "rbxassetid://84055323674335", Idle = "rbxassetid://76788131144151", Walk = "rbxassetid://74737589673617", Sprint = "rbxassetid://74737589673617" }
 	},
@@ -117,6 +134,14 @@ local Items: Types.WeaponCatalog = {
 		Shake = { Intensity = 4.0, Decay = 7 },
 		Recoil = { Pitch = 9.5, Yaw = 1.6 },
 		Aim = { FOV = 30, SpreadMultiplier = 0.1 },
+		Handling = {
+			Spread = { Hip = 45, Aim = 0, Move = 20, Air = 50, Slide = 25, AimPenalty = 0.2, Bloom = 0, MaxBloom = 0, BloomRecovery = 60 },
+			Headshot = 2,
+			Recoil = { Pattern = { { 3.2, 0.3 } }, Wander = 0.4, RecoveryDelay = 0.2, RecoveryRate = 10 },
+			TacticalReloadTime = 1.7,
+			EquipTime = 0.6,
+			Scope = true,
+		},
 
 		Animations = { Shoot = "rbxassetid://101828241949203", Reload = "rbxassetid://93766855465736", Idle = "rbxassetid://98715180840350", Walk = "rbxassetid://133471749603993", Sprint = "rbxassetid://133471749603993" }
 	},
@@ -126,6 +151,18 @@ local Items: Types.WeaponCatalog = {
 		Shake = { Intensity = 0.8, Decay = 12 },
 		Recoil = { Pitch = 2.6, Yaw = 0.9 },
 		Aim = { FOV = 55, SpreadMultiplier = 0.45 },
+		Handling = {
+			Spread = { Hip = 8, Aim = 3, Move = 6, Air = 22, Slide = 8, AimPenalty = 0.5, Bloom = 1.5, MaxBloom = 14, BloomRecovery = 40 },
+			Falloff = { Start = 90, End = 220, Min = 0.7 },
+			Headshot = 1.6,
+			Recoil = {
+				Pattern = { { 0.55, 0 }, { 0.6, 0.05 }, { 0.65, 0.1 }, { 0.7, 0.1 }, { 0.7, 0.15 }, { 0.6, 0.25 }, { 0.5, 0.35 }, { 0.4, 0.35 },
+					{ 0.35, 0.2 }, { 0.3, -0.1 }, { 0.3, -0.35 }, { 0.3, -0.4 }, { 0.25, -0.35 }, { 0.25, -0.1 }, { 0.25, 0.2 }, { 0.25, 0.35 } },
+				Wander = 0.25, RecoveryDelay = 0.12, RecoveryRate = 14,
+			},
+			TacticalReloadTime = 1.25,
+			EquipTime = 0.45,
+		},
 
 		Animations = { Shoot = "rbxassetid://98842943786422", Reload = "rbxassetid://70986236399168", Idle = "rbxassetid://127694603378551", Walk = "rbxassetid://116073209021469", Sprint = "rbxassetid://116073209021469" }
 	},
@@ -135,6 +172,17 @@ local Items: Types.WeaponCatalog = {
 		Shake = { Intensity = 0.5, Decay = 16 },
 		Recoil = { Pitch = 1.9, Yaw = 0.8 },
 		Aim = { FOV = 58, SpreadMultiplier = 0.5 },
+		Handling = {
+			Spread = { Hip = 12, Aim = 6, Move = 3, Air = 12, Slide = 4, AimPenalty = 0.5, Bloom = 1, MaxBloom = 12, BloomRecovery = 50 },
+			Falloff = { Start = 40, End = 120, Min = 0.55 },
+			Headshot = 1.4,
+			Recoil = {
+				Pattern = { { 0.35, 0 }, { 0.4, 0.1 }, { 0.4, -0.1 }, { 0.4, 0.15 }, { 0.35, -0.15 }, { 0.3, 0.2 }, { 0.3, -0.2 }, { 0.25, 0.25 }, { 0.25, -0.25 }, { 0.2, 0.2 } },
+				Wander = 0.3, RecoveryDelay = 0.1, RecoveryRate = 12,
+			},
+			TacticalReloadTime = 1.0,
+			EquipTime = 0.35,
+		},
 
 		Animations = { Shoot = "rbxassetid://93777660426232", Reload = "rbxassetid://116733200772749", Idle = "rbxassetid://124267210387896", Walk = "rbxassetid://128330126585616", Sprint = "rbxassetid://128330126585616" }
 	},
@@ -144,6 +192,18 @@ local Items: Types.WeaponCatalog = {
 		Shake = { Intensity = 1.0, Decay = 10 },
 		Recoil = { Pitch = 3.4, Yaw = 1.0 },
 		Aim = { FOV = 55, SpreadMultiplier = 0.4 },
+		Handling = {
+			Spread = { Hip = 6, Aim = 2, Move = 7, Air = 24, Slide = 10, AimPenalty = 0.5, Bloom = 2, MaxBloom = 16, BloomRecovery = 35 },
+			Falloff = { Start = 100, End = 260, Min = 0.75 },
+			Headshot = 1.6,
+			Recoil = {
+				Pattern = { { 0.8, 0 }, { 0.85, 0.1 }, { 0.9, 0.2 }, { 0.8, 0.3 }, { 0.7, 0.3 }, { 0.6, 0.1 }, { 0.5, -0.25 }, { 0.45, -0.45 },
+					{ 0.4, -0.4 }, { 0.4, -0.1 }, { 0.4, 0.25 } },
+				Wander = 0.3, RecoveryDelay = 0.14, RecoveryRate = 16,
+			},
+			TacticalReloadTime = 1.35,
+			EquipTime = 0.5,
+		},
 
 		Animations = { Shoot = "rbxassetid://133379495548916", Reload = "rbxassetid://116854355282803", Idle = "rbxassetid://127694603378551", Walk = "rbxassetid://116073209021469", Sprint = "rbxassetid://116073209021469" }
 	},
@@ -153,6 +213,13 @@ local Items: Types.WeaponCatalog = {
 		Shake = { Intensity = 3.5, Decay = 8 },
 		Recoil = { Pitch = 8.5, Yaw = 2.0 },
 		Aim = { FOV = 62, SpreadMultiplier = 0.6 },
+		Handling = {
+			Spread = { Hip = 30, Aim = 20, Move = 4, Air = 6, Slide = 0, AimPenalty = 1, Bloom = 0, MaxBloom = 0, BloomRecovery = 60 },
+			Falloff = { Start = 15, End = 60, Min = 0.3 },
+			Headshot = 1.25,
+			Recoil = { Pattern = { { 2.6, 0.2 } }, Wander = 0.4, RecoveryDelay = 0.15, RecoveryRate = 12 },
+			EquipTime = 0.5,
+		},
 
 		Animations = { Shoot = "rbxassetid://140337976272295", Reload = "rbxassetid://84283526160957", Idle = "rbxassetid://128036426437584", Walk = "rbxassetid://113147747937745", Sprint = "rbxassetid://113147747937745" }
 	}

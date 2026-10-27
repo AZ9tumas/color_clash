@@ -71,6 +71,8 @@ function Motion.new(settings)
 		lastCamera = nil,
 		lastVerticalSpeed = 0,
 		wasGrounded = true,
+		drawDuration = nil,
+		drawElapsed = 0,
 	}, Motion)
 end
 
@@ -83,6 +85,14 @@ function Motion:Reset()
 	self.bobAmount = 0
 	self.lastCamera = nil
 	self.wasGrounded = true
+	self.drawDuration = nil
+end
+
+-- Raises the gun into place over `duration`, so a weapon swap reads as a draw
+-- rather than a pop while there is no authored equip animation.
+function Motion:Draw(duration: number)
+	self.drawDuration = math.max(duration, 0.05)
+	self.drawElapsed = 0
 end
 
 -- recoilPitch / recoilYaw are the weapon's Items.Recoil values, so each gun kicks
@@ -186,6 +196,15 @@ function Motion:Update(dt: number, cameraCFrame: CFrame): CFrame
 	local move = self.kickMove.position + self.swayMove.position + self.land.position
 		+ bobOffset + Vector3.new(0, breath, 0)
 	local turn = self.kickTurn.position + self.sway.position + Vector3.new(0, 0, bobRoll)
+
+	if self.drawDuration then
+		self.drawElapsed += dt
+		local t = math.clamp(self.drawElapsed / self.drawDuration, 0, 1)
+		local remaining = (1 - t) ^ 3
+		move += Vector3.new(0, -(s.DrawDrop or 0.7), s.DrawPullBack or 0.25) * remaining
+		turn += Vector3.new(-(s.DrawTilt or 0.7), 0, s.DrawRoll or 0.3) * remaining
+		if t >= 1 then self.drawDuration = nil end
+	end
 
 	-- Rotate about a point near the gun, not the camera origin, so a kick pitches
 	-- the weapon in the hands instead of swinging it around the player's eye.

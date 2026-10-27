@@ -10,7 +10,11 @@ local remoteNames = {
 	ShowBulletTracer = "RemoteEvent",
 	DamageVFX = "RemoteEvent",
 	PushRequest = "RemoteEvent",
-	AimPitch = "RemoteEvent"
+	AimPitch = "RemoteEvent",
+	Reload = "RemoteEvent",
+	AmmoSync = "RemoteEvent",
+	DamageIndicator = "RemoteEvent",
+	ThrowUtility = "RemoteEvent"
 }
 
 if isServer then
@@ -36,5 +40,9 @@ function CombatRemotes.GetBulletTracer() return getRemote("ShowBulletTracer") en
 function CombatRemotes.GetDamageVFX() return getRemote("DamageVFX") end
 function CombatRemotes.GetPushRequest() return getRemote("PushRequest") end
 function CombatRemotes.GetAimPitch() return getRemote("AimPitch") end
+function CombatRemotes.GetReload() return getRemote("Reload") end
+function CombatRemotes.GetAmmoSync() return getRemote("AmmoSync") end
+function CombatRemotes.GetDamageIndicator() return getRemote("DamageIndicator") end
+function CombatRemotes.GetThrowUtility() return getRemote("ThrowUtility") end
 
 return CombatRemotes

@@ -8,6 +8,8 @@ local RoundConfig = require(Shared.Modules.Core.RoundConfig)
 local PlayerUtil = require(Shared.Modules.Utils.PlayerUtil)
 local FXUtil = require(Shared.Modules.Utils.FXUtil)
 local HitscanUtil = require(Shared.Modules.Utils.HitscanUtil)
+local CombatConfig = require(Shared.Modules.Core.CombatConfig)
+local LagCompensation = require(ServerScriptService.Server.Classes.LagCompensation)
 local QuestServer = require(ServerScriptService.Server.Services.QuestService.QuestServer)
 local RewardManager = require(Shared.Modules.Game.RewardManager)
 local CombatRemotes = require(Shared.Remotes.CombatRemotes)
@@ -15,6 +17,7 @@ local RoundRemotes = require(Shared.Remotes.RoundRemotes)
 
 local ShowBulletTracer = CombatRemotes.GetBulletTracer()
 local DamageVFX = CombatRemotes.GetDamageVFX()
+local DamageIndicator = CombatRemotes.GetDamageIndicator()
 local KillFeedEvent = RoundRemotes.GetKillFeedEvent()
 
 local WeaponServer = {}
@@ -35,7 +38,23 @@ local function announceKill(sourceName, sourcePlayer, victimName, victimPlayer, 
 	})
 end
 
-function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourcePlayer, toolName, isHeadshot)
+-- Tells the victim where the damage came from (CombatConfig.CombatFeedback).
+local function notifyHit(targetPlayer, sourcePlayer, sourcePosition: Vector3?)
+	if not sourcePlayer or sourcePlayer == targetPlayer or not CombatConfig.IsEnabled("CombatFeedback") then return end
+	if not sourcePosition then
+		local root = sourcePlayer.Character and sourcePlayer.Character:FindFirstChild("HumanoidRootPart")
+		sourcePosition = root and root.Position
+	end
+	if sourcePosition then
+		DamageIndicator:FireClient(targetPlayer, sourcePosition)
+	end
+end
+
+-- sourcePosition is optional: where the damage came from when that is not the
+-- attacker's body (an explosion), for the victim's hit-direction indicator.
+function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourcePlayer, toolName, isHeadshot, sourcePosition)
+	-- Shared damage entry point: replicated asset templates are never targets.
+	if not targetCharacter:IsDescendantOf(Workspace) then return false end
 	local targetPlayer = Players:GetPlayerFromCharacter(targetCharacter)
 	local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
 
@@ -49,6 +68,7 @@ function WeaponServer.ProcessDamage(targetCharacter, damage, sourceName, sourceP
 
 	if targetPlayer then
 		if targetPlayer:GetAttribute("IsPlaying") then
+			notifyHit(targetPlayer, sourcePlayer, sourcePosition)
 			QuestServer.UpdateShotsTaken(targetPlayer)
 			if sourcePlayer and sourcePlayer ~= targetPlayer then
 				QuestServer.UpdateShotsLanded(sourcePlayer)
@@ -149,7 +169,53 @@ function WeaponServer.FireMelee(player, toolName, data)
 	end
 end
 
-function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming, eyeOrigin, clientDirections)
+-- Hit claims arrive as { pelletIndex, part } pairs. Anything malformed is
+-- dropped, which only turns that pellet into a miss.
+local function readClaims(claims, pellets: number)
+	local byPellet = {}
+	if type(claims) ~= "table" then return byPellet end
+
+	for n = 1, math.min(#claims, pellets) do
+		local claim = claims[n]
+		if type(claim) == "table" then
+			local index, part = claim[1], claim[2]
+			if type(index) == "number" and index % 1 == 0 and index >= 1 and index <= pellets
+				and byPellet[index] == nil and typeof(part) == "Instance" and part:IsA("BasePart") then
+				byPellet[index] = part
+			end
+		end
+	end
+	return byPellet
+end
+
+-- Damages the target of one pellet the shooter's client says hit `part`, if the
+-- server agrees it could have: the part sat on that ray inside the shooter's
+-- rewind window, and no wall stands in between. Returns where the tracer ends.
+local function resolveClaim(player, toolName, data, origin, direction, range, part)
+	local character = player.Character
+	local targetChar = part and LagCompensation.ModelOf(part)
+	if targetChar and targetChar ~= character then
+		local hitPosition, struck = LagCompensation.FindHit(player, part, origin, direction, range)
+		if hitPosition and LagCompensation.IsClear(origin, hitPosition, targetChar) then
+			local isHeadshot = struck.Name == "Head"
+			local damage = isHeadshot and data.Damage * 2 or data.Damage
+			if CombatConfig.IsEnabled("GunHandling") then
+				damage = HitscanUtil.HandlingDamage(data, (hitPosition - origin).Magnitude, isHeadshot)
+			end
+			local killed = WeaponServer.ProcessDamage(targetChar, damage, player.Name, player, toolName, isHeadshot)
+			-- The shooter already showed this hit when it fired; only a kill is news.
+			if killed then
+				DamageVFX:FireClient(player, hitPosition, tostring(damage), struck, nil, true, true)
+			end
+			return hitPosition
+		end
+	end
+
+	local result = HitscanUtil.Cast(origin, direction, range, character)
+	return result and result.Position or origin + direction * range
+end
+
+function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming, eyeOrigin, clientDirections, claims)
 	local character = player.Character
 	if not character or not HitscanUtil.IsFiniteVector(mousePos) then return end
 	local tool = character:FindFirstChild(toolName)
@@ -181,11 +247,23 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming, ey
 
 	local spread = HitscanUtil.EffectiveSpread(data, isAiming)
 	local pellets = data.Pellets or 1
-	local directions = HitscanUtil.ValidateDirections(clientDirections, aimDirection, spread, pellets)
+	-- Under GunHandling the client's cone depends on movement the server cannot
+	-- see exactly at the moment of firing, so directions are checked against the
+	-- widest cone that gun can produce.
+	local spreadLimit = CombatConfig.IsEnabled("GunHandling") and HitscanUtil.SpreadBound(data) or spread
+	local directions = HitscanUtil.ValidateDirections(clientDirections, aimDirection, spreadLimit, pellets)
 	-- Missing directions retain support for older senders; malformed predictions
 	-- are rejected instead of turning into a different, late shot.
 	if clientDirections ~= nil and not directions then return end
 	local shooterDrewTracers = directions ~= nil
+
+	-- Under ClientHitReg the shooter's client reports what each pellet hit, so its
+	-- spread rolls are required; pellets without a claim are misses.
+	local claimed = nil
+	if CombatConfig.IsEnabled("ClientHitReg") then
+		if not directions then return end
+		claimed = readClaims(claims, pellets)
+	end
 
 	-- Local presentation already ran; this replicated sound is for other players.
 	local fireSound = handle:FindFirstChild("FireSFX")
@@ -194,17 +272,25 @@ function WeaponServer.FireHitscan(player, toolName, data, mousePos, isAiming, ey
 	for i = 1, pellets do
 		local direction = directions and directions[i] or HitscanUtil.ConeDirection(aimDirection, spread)
 
-		local result = HitscanUtil.Cast(rayOrigin, direction, range, character)
+		local visualTarget
+		if claimed then
+			visualTarget = resolveClaim(player, toolName, data, rayOrigin, direction, range, claimed[i])
+		else
+			local result = HitscanUtil.Cast(rayOrigin, direction, range, character)
 
-		local visualTarget = rayOrigin + (direction * range)
-		if result and result.Instance then
-			visualTarget = result.Position
-			local targetChar = result.Instance:FindFirstAncestorWhichIsA("Model")
-			if targetChar and targetChar:FindFirstChildOfClass("Humanoid") then
-				local isHeadshot = result.Instance.Name == "Head"
-				local damage = isHeadshot and data.Damage * 2 or data.Damage
-				local killed = WeaponServer.ProcessDamage(targetChar, damage, player.Name, player, toolName, isHeadshot)
-				DamageVFX:FireClient(player, visualTarget, tostring(damage), result.Instance, result.Normal, killed == true)
+			visualTarget = rayOrigin + (direction * range)
+			if result and result.Instance then
+				visualTarget = result.Position
+				local targetChar = result.Instance:FindFirstAncestorWhichIsA("Model")
+				if targetChar and targetChar:FindFirstChildOfClass("Humanoid") then
+					local isHeadshot = result.Instance.Name == "Head"
+					local damage = isHeadshot and data.Damage * 2 or data.Damage
+					if CombatConfig.IsEnabled("GunHandling") then
+						damage = HitscanUtil.HandlingDamage(data, (result.Position - rayOrigin).Magnitude, isHeadshot)
+					end
+					local killed = WeaponServer.ProcessDamage(targetChar, damage, player.Name, player, toolName, isHeadshot)
+					DamageVFX:FireClient(player, visualTarget, tostring(damage), result.Instance, result.Normal, killed == true)
+				end
 			end
 		end
 

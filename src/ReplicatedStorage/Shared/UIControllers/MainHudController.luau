@@ -7,6 +7,7 @@ local Shared = ReplicatedStorage.Shared
 local Items = require(Shared.Modules.Core.Items)
 local UIAnimations = require(Shared.Modules.Utils.UIAnimations)
 local RoundRemotes = require(Shared.Remotes.RoundRemotes)
+local CombatConfig = require(Shared.Modules.Core.CombatConfig)
 
 local MainHudController = {}
 
@@ -30,6 +31,24 @@ local currentWeaponsVisible = false
 function MainHudController.SetWeaponInfo(weaponName, ammoStr)
 	NameText.Text = weaponName or "N/A"
 	AmmoText.Text = ammoStr or "N/A"
+end
+
+-- Tints the ammo counter as the magazine runs down (CombatConfig.CombatFeedback);
+-- nil puts the original colour back.
+local ammoBaseColor = AmmoText.TextColor3
+local LOW_AMMO_COLOR = Color3.fromRGB(255, 170, 40)
+local EMPTY_AMMO_COLOR = Color3.fromRGB(255, 60, 60)
+
+function MainHudController.SetAmmoWarning(fraction: number?)
+	if fraction == nil then
+		AmmoText.TextColor3 = ammoBaseColor
+	elseif fraction <= 0 then
+		AmmoText.TextColor3 = EMPTY_AMMO_COLOR
+	elseif fraction <= 0.3 then
+		AmmoText.TextColor3 = LOW_AMMO_COLOR
+	else
+		AmmoText.TextColor3 = ammoBaseColor
+	end
 end
 
 local weaponsFolder = nil
@@ -177,6 +196,20 @@ local function updateHealth(health, maxHealth)
 	TweenService:Create(HealthBarFill, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(math.clamp(health / maxHealth, 0, 1), 0, 1, 0)}):Play()
 end
 
+local function isMainTool(tool: Tool): boolean
+	return Items[tool.Name] ~= nil and Items[tool.Name].MaxAmmo ~= nil
+end
+
+-- The slot of the tool in hand, or nil.
+local function heldSlot(): string?
+	local char = player.Character
+	local tool = char and char:FindFirstChildOfClass("Tool")
+	if not tool then return nil end
+	return isMainTool(tool) and "Main" or "Melee"
+end
+
+local lastSlot = "Main"
+
 local function equipWeapon(slot)
 	local char = player.Character
 	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -208,7 +241,24 @@ local function equipWeapon(slot)
 	end
 
 	if targetTool then
-		if targetTool.Parent == char then humanoid:UnequipTools() else humanoid:EquipTool(targetTool) end
+		if targetTool.Parent == char then
+			-- Under QuickSwap you always hold something: the held slot's key does nothing.
+			if not CombatConfig.IsEnabled("QuickSwap") then humanoid:UnequipTools() end
+		else
+			lastSlot = heldSlot() or lastSlot
+			humanoid:EquipTool(targetTool)
+		end
+	end
+end
+
+-- Q / mouse wheel under QuickSwap: the other slot, or the last one used when
+-- nothing is in hand.
+local function swapWeapon()
+	local held = heldSlot()
+	if held then
+		equipWeapon(held == "Main" and "Melee" or "Main")
+	else
+		equipWeapon(lastSlot)
 	end
 end
 
@@ -245,7 +295,18 @@ function MainHudController.Init()
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if processed or player:GetAttribute("InMenu") ~= false then return end
 		if input.KeyCode == Enum.KeyCode.One then equipWeapon("Main")
-		elseif input.KeyCode == Enum.KeyCode.Two then equipWeapon("Melee") end
+		elseif input.KeyCode == Enum.KeyCode.Two then equipWeapon("Melee")
+		elseif input.KeyCode == Enum.KeyCode.Q and CombatConfig.IsEnabled("QuickSwap") then swapWeapon() end
+	end)
+
+	-- One wheel flick sends several notches; only the first swaps.
+	local lastWheelSwap = 0
+	UserInputService.InputChanged:Connect(function(input, processed)
+		if processed or input.UserInputType ~= Enum.UserInputType.MouseWheel then return end
+		if player:GetAttribute("InMenu") ~= false or not CombatConfig.IsEnabled("QuickSwap") then return end
+		if player:GetAttribute("IsPlaying") ~= true or os.clock() - lastWheelSwap < 0.15 then return end
+		lastWheelSwap = os.clock()
+		swapWeapon()
 	end)
 
 	player:GetAttributeChangedSignal("IsPlaying"):Connect(updateVisibility)

@@ -325,6 +325,78 @@ function FXUtil.BulletTracer(origin, targetPos)
 	tween.Completed:Connect(function() tracer:Destroy() end)
 end
 
+-- A bullet striking the world (CombatConfig.CombatFeedback): a short-lived
+-- hole on the surface, a puff of dust in the surface's colour and a few sparks.
+function FXUtil.BulletImpact(position, normal, surface)
+	if not position or not normal then return end
+
+	local right = normal
+	local up = math.abs(right.Y) > 0.99 and Vector3.new(0, 0, 1) or Vector3.new(0, 1, 0)
+	local back = right:Cross(up).Unit
+	up = back:Cross(right).Unit
+
+	local hole = makeEffectPart(Enum.PartType.Cylinder)
+	hole.Name = "BulletHole"
+	hole.Material = Enum.Material.SmoothPlastic
+	hole.Color = Color3.fromRGB(25, 25, 25)
+	local radius = 0.28 + math.random() * 0.08
+	hole.Size = Vector3.new(0.02, radius, radius)
+	hole.CFrame = CFrame.fromMatrix(position + normal * 0.012, right, up, back)
+	hole.Parent = effectsFolder()
+
+	local emitterPart = makeEffectPart(Enum.PartType.Ball)
+	emitterPart.Transparency = 1
+	emitterPart.Size = Vector3.new(0.2, 0.2, 0.2)
+	emitterPart.CFrame = CFrame.lookAt(position, position + normal)
+
+	local surfaceColor = (surface and surface:IsA("BasePart")) and surface.Color or Color3.fromRGB(180, 180, 180)
+	local dust = Instance.new("ParticleEmitter")
+	dust.Color = ColorSequence.new(surfaceColor:Lerp(Color3.new(1, 1, 1), 0.25))
+	dust.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.25),
+		NumberSequenceKeypoint.new(1, 0.9),
+	})
+	dust.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	dust.Lifetime = NumberRange.new(0.25, 0.45)
+	dust.Speed = NumberRange.new(4, 9)
+	dust.SpreadAngle = Vector2.new(35, 35)
+	dust.Acceleration = Vector3.new(0, -12, 0)
+	dust.EmissionDirection = Enum.NormalId.Front
+	dust.Enabled = false
+	dust.Parent = emitterPart
+
+	local sparks = Instance.new("ParticleEmitter")
+	sparks.Color = ColorSequence.new(Color3.fromRGB(255, 220, 140))
+	sparks.LightEmission = 1
+	sparks.LightInfluence = 0
+	sparks.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.08),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	sparks.Lifetime = NumberRange.new(0.08, 0.18)
+	sparks.Speed = NumberRange.new(14, 26)
+	sparks.SpreadAngle = Vector2.new(45, 45)
+	sparks.Acceleration = Vector3.new(0, -40, 0)
+	sparks.EmissionDirection = Enum.NormalId.Front
+	sparks.Enabled = false
+	sparks.Parent = emitterPart
+
+	emitterPart.Parent = effectsFolder()
+	dust:Emit(6)
+	sparks:Emit(4)
+	Debris:AddItem(emitterPart, 1)
+
+	task.delay(2.5, function()
+		if not hole.Parent then return end
+		local fade = TweenService:Create(hole, TweenInfo.new(1), { Transparency = 1 })
+		fade:Play()
+		fade.Completed:Connect(function() hole:Destroy() end)
+	end)
+end
+
 function FXUtil.EjectShell(position, rightVector)
 	if not position then return end
 

@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local SpringHandler = require(Shared.Modules.Utils.Spring)
+local JointUtil = require(Shared.Modules.Utils.JointUtil)
 local CombatRemotes = require(Shared.Remotes.CombatRemotes)
 local SettingsController = require(Shared.UIControllers.SettingsController)
 local FXConfig = require(Shared.Modules.Core.FXConfig)
@@ -95,20 +96,20 @@ local VIEWMODEL_WEAPON_NAME = "ViewmodelWeapon"
 
 local function findJoint(character, parentName, jointName)
 	local parent = character and character:FindFirstChild(parentName)
-	return parent and parent:FindFirstChild(jointName)
+	local joint = parent and parent:FindFirstChild(jointName)
+	return joint and JointUtil.GetC0(joint) and joint or nil
 end
 
 local function saveOriginalC0(joint)
 	if not joint:GetAttribute("RigOriginalC0") then
-		joint:SetAttribute("RigOriginalC0", joint.C0)
+		joint:SetAttribute("RigOriginalC0", JointUtil.GetC0(joint))
 	end
 	return joint:GetAttribute("RigOriginalC0")
 end
 
 local function writeJointC0(joint, c0)
-	return (pcall(function()
-		joint.C0 = c0
-	end))
+	local ok, written = pcall(JointUtil.SetC0, joint, c0)
+	return ok and written
 end
 
 local function restoreJoints(character)

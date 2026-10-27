@@ -145,6 +145,35 @@ function Viewmodel:Kick(pitch: number, yaw: number, aiming: boolean?)
 	self.renderer:Kick(pitch, yaw, aiming)
 end
 
+-- Procedural draw motion while the gun is being equipped.
+function Viewmodel:Draw(duration: number)
+	if self.destroyed then return end
+	self.renderer:Draw(duration)
+end
+
+-- Hides the viewmodel without tearing it down, e.g. behind a sniper scope.
+-- Each part's own modifier is put back afterwards, not reset to zero.
+function Viewmodel:SetHidden(hidden: boolean)
+	if self.destroyed then return end
+	if hidden then
+		if self.hiddenModifiers then return end
+		self.hiddenModifiers = {}
+		for _, descendant in self.model:GetDescendants() do
+			if descendant:IsA("BasePart") or descendant:IsA("Decal") then
+				self.hiddenModifiers[descendant] = descendant.LocalTransparencyModifier
+				descendant.LocalTransparencyModifier = 1
+			end
+		end
+	elseif self.hiddenModifiers then
+		for descendant, modifier in self.hiddenModifiers do
+			if descendant.Parent then
+				descendant.LocalTransparencyModifier = modifier
+			end
+		end
+		self.hiddenModifiers = nil
+	end
+end
+
 function Viewmodel:StartADS()
 	if self.destroyed then return end
 	self.renderer:StartADS(Vector3.zero)

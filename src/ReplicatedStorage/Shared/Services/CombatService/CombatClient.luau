@@ -12,8 +12,10 @@ local RoundRemotes = require(Shared.Remotes.RoundRemotes)
 local CrosshairController = require(Shared.UIControllers.CrosshairController)
 local SettingsController = require(Shared.UIControllers.SettingsController)
 local FXUtil = require(Shared.Modules.Utils.FXUtil)
+local HitscanUtil = require(Shared.Modules.Utils.HitscanUtil)
 local CameraFX = require(Shared.Modules.Utils.CameraFX)
 local Viewmodel = require(Shared.Classes.Viewmodel)
+local CombatConfig = require(Shared.Modules.Core.CombatConfig)
 
 local CombatClient = {}
 
@@ -63,6 +65,82 @@ local function buildKillVignette(playerGui)
 	end
 end
 
+-- Hit-direction indicator (CombatConfig.CombatFeedback): a red bar on a ring
+-- around the crosshair, turned toward where the damage came from and kept
+-- pointing there as the camera turns, fading out over its lifetime.
+local INDICATOR_RADIUS = 120
+local INDICATOR_LIFETIME = 1.5
+local indicatorGui = nil
+local activeIndicators = {}
+
+local function indicatorLayer()
+	if indicatorGui and indicatorGui.Parent then return indicatorGui end
+	local playerGui = player:FindFirstChild("PlayerGui")
+	if not playerGui then return nil end
+
+	indicatorGui = Instance.new("ScreenGui")
+	indicatorGui.Name = "DamageIndicators"
+	indicatorGui.IgnoreGuiInset = true
+	indicatorGui.DisplayOrder = 5
+	indicatorGui.ResetOnSpawn = false
+	indicatorGui.Parent = playerGui
+	return indicatorGui
+end
+
+local function showDamageIndicator(sourcePosition: Vector3)
+	local layer = indicatorLayer()
+	if not layer then return end
+
+	-- A zero-size pivot at the screen centre; the bar sits out on the ring and
+	-- the pivot's rotation swings it around.
+	local pivot = Instance.new("Frame")
+	pivot.AnchorPoint = Vector2.new(0.5, 0.5)
+	pivot.Position = UDim2.fromScale(0.5, 0.5)
+	pivot.Size = UDim2.fromOffset(0, 0)
+	pivot.BackgroundTransparency = 1
+	pivot.Parent = layer
+
+	local bar = Instance.new("Frame")
+	bar.AnchorPoint = Vector2.new(0.5, 0.5)
+	bar.Position = UDim2.fromOffset(0, -INDICATOR_RADIUS)
+	bar.Size = UDim2.fromOffset(140, 13)
+	bar.BackgroundColor3 = Color3.fromRGB(255, 45, 45)
+	bar.BorderSizePixel = 0
+	bar.Parent = pivot
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.5, 0)
+	corner.Parent = bar
+
+	local gradient = Instance.new("UIGradient")
+	gradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.5, 0),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	gradient.Parent = bar
+
+	table.insert(activeIndicators, { pivot = pivot, bar = bar, source = sourcePosition, born = os.clock() })
+end
+
+local function updateDamageIndicators()
+	if #activeIndicators == 0 then return end
+	local now = os.clock()
+	for i = #activeIndicators, 1, -1 do
+		local entry = activeIndicators[i]
+		local age = now - entry.born
+		if age >= INDICATOR_LIFETIME or not entry.pivot.Parent then
+			entry.pivot:Destroy()
+			table.remove(activeIndicators, i)
+		else
+			-- 0 degrees is straight ahead (top of the screen), clockwise to the right
+			local relative = camera.CFrame:PointToObjectSpace(entry.source)
+			entry.pivot.Rotation = math.deg(math.atan2(relative.X, -relative.Z))
+			entry.bar.BackgroundTransparency = math.clamp((age / INDICATOR_LIFETIME - 0.6) / 0.4, 0, 1)
+		end
+	end
+end
+
 local function showKillFlash()
 	local playerGui = player:FindFirstChild("PlayerGui")
 	if not playerGui then return end
@@ -99,7 +177,8 @@ end
 function CombatClient.Init()
 	CrosshairController.SetCrosshairVisible(false)
 
-	CombatRemotes.GetDamageVFX().OnClientEvent:Connect(function(position, damage, hitPart, hitNormal, killed)
+	-- Hit marker, sound, damage number and blood for one landed hit.
+	local function showHitFeedback(position, damage, hitPart, hitNormal, killed)
 		local isHeadshot = hitPart and string.find(string.lower(hitPart.Name), "head") ~= nil
 
 		if hitPart then
@@ -326,6 +405,21 @@ function CombatClient.Init()
 				end)
 			end
 		end
+	end
+
+	-- Under CombatConfig.ClientHitReg the shooter's GunHandler calls this the
+	-- moment its own pellet lands, instead of waiting a round trip for DamageVFX.
+	function CombatClient.ShowPredictedHit(position, damage, hitPart, hitNormal)
+		showHitFeedback(position, damage, hitPart, hitNormal, false)
+	end
+
+	CombatRemotes.GetDamageVFX().OnClientEvent:Connect(function(position, damage, hitPart, hitNormal, killed, predicted)
+		if predicted then
+			-- Feedback already played when we fired; the server only confirms a kill.
+			if killed then showKillFlash() end
+			return
+		end
+		showHitFeedback(position, damage, hitPart, hitNormal, killed)
 	end)
 
 	RoundRemotes.GetKillFeedEvent().OnClientEvent:Connect(function(entry)
@@ -352,10 +446,29 @@ function CombatClient.Init()
 			end
 		else
 			FXUtil.MuzzleFlash(origin)
+			-- Someone else's shot: find the surface it struck so the impact
+			-- lands on it. The shooter draws its own impacts when it fires.
+			if CombatConfig.IsEnabled("CombatFeedback") then
+				local offset = targetPos - origin
+				if offset.Magnitude > 0.1 then
+					local result = HitscanUtil.CastIgnoring(origin, offset.Unit, offset.Magnitude + 0.5, { camera })
+					local model = result and result.Instance:FindFirstAncestorWhichIsA("Model")
+					if result and not (model and model:FindFirstChildOfClass("Humanoid")) then
+						FXUtil.BulletImpact(result.Position, result.Normal, result.Instance)
+					end
+				end
+			end
 		end
 
 		FXUtil.BulletTracer(origin, targetPos)
 	end)
+
+	CombatRemotes.GetDamageIndicator().OnClientEvent:Connect(function(sourcePosition)
+		if typeof(sourcePosition) == "Vector3" then
+			showDamageIndicator(sourcePosition)
+		end
+	end)
+	RunService.RenderStepped:Connect(updateDamageIndicators)
 
 	RunService.RenderStepped:Connect(function(dt)
 		local char = player.Character

@@ -10,6 +10,7 @@ local MovementConfig = require(Shared.Modules.Core.MovementConfig)
 local MovementRemotes = require(Shared.Remotes.MovementRemotes)
 local FXConfig = require(Shared.Modules.Core.FXConfig)
 local FXUtil = require(Shared.Modules.Utils.FXUtil)
+local JointUtil = require(Shared.Modules.Utils.JointUtil)
 
 local MovementClient = {}
 
@@ -66,7 +67,18 @@ local function getDistToFloor()
 end
 
 local function loadTracks()
+	-- Tracks belong to the previous character and may target a different rig.
+	for _, trackData in pairs(tracks) do
+		local oldTracks = type(trackData) == "table" and trackData or { trackData }
+		for _, track in oldTracks do
+			track:Stop(0)
+			track:Destroy()
+		end
+	end
+	table.clear(tracks)
 	if not hum then return end
+	-- These authored clips target R6 limbs. R15 keeps its avatar locomotion.
+	if hum.RigType ~= Enum.HumanoidRigType.R6 then return end
 	local animator = hum:FindFirstChildOfClass("Animator") or hum
 
 	if type(MovementConfig) == "table" and type(MovementConfig.Animations) == "table" then
@@ -907,9 +919,9 @@ function MovementClient.Init()
 			hum.AutoRotate = true
 		end
 
-		if rootJoint then
+		if rootJoint and JointUtil.GetC0(rootJoint) then
 			if not rootJoint:GetAttribute("OriginalC0") then
-				rootJoint:SetAttribute("OriginalC0", rootJoint.C0)
+				rootJoint:SetAttribute("OriginalC0", JointUtil.GetC0(rootJoint))
 			end
 			local origC0 = rootJoint:GetAttribute("OriginalC0")
 
@@ -934,9 +946,9 @@ function MovementClient.Init()
 			rootJoint:SetAttribute("TiltZ", currentTiltZ)
 
 			if math.abs(currentTiltX) > 0.001 or math.abs(currentTiltZ) > 0.001 then
-				rootJoint.C0 = origC0 * CFrame.Angles(currentTiltX, 0, currentTiltZ)
+				JointUtil.SetC0(rootJoint, origC0 * CFrame.Angles(currentTiltX, 0, currentTiltZ))
 			else
-				rootJoint.C0 = origC0
+				JointUtil.SetC0(rootJoint, origC0)
 			end
 		end
 	end)

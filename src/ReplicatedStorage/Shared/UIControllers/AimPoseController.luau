@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local JointUtil = require(game:GetService("ReplicatedStorage").Shared.Modules.Utils.JointUtil)
 
 local AimPoseController = {}
 
@@ -11,16 +12,18 @@ local SMOOTHING = 12
 local currentPitch = {}
 
 local function neckOf(character)
-	local torso = character and character:FindFirstChild("Torso")
-	return torso and torso:FindFirstChild("Neck")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local isR15 = humanoid and humanoid.RigType == Enum.HumanoidRigType.R15
+	local parent = character and character:FindFirstChild(isR15 and "Head" or "Torso")
+	return parent and parent:FindFirstChild("Neck"), isR15 and 1 or -1
 end
 
 function AimPoseController.Init()
 	RunService.Heartbeat:Connect(function(dt)
 		for _, other in Players:GetPlayers() do
 			if other ~= player then
-				local neck = neckOf(other.Character)
-				if neck then
+				local neck, pitchSign = neckOf(other.Character)
+				if neck and JointUtil.GetC0(neck) then
 					local target = other:GetAttribute("AimPitch")
 					if type(target) ~= "number" then target = 0 end
 
@@ -29,13 +32,13 @@ function AimPoseController.Init()
 					currentPitch[other] = smoothed
 
 					if not neck:GetAttribute("PoseOriginalC0") then
-						neck:SetAttribute("PoseOriginalC0", neck.C0)
+						neck:SetAttribute("PoseOriginalC0", JointUtil.GetC0(neck))
 					end
 
 					if math.abs(smoothed) > 0.005 then
-						neck.C0 = neck:GetAttribute("PoseOriginalC0") * CFrame.Angles(-smoothed * NECK_PITCH_SCALE, 0, 0)
+						JointUtil.SetC0(neck, neck:GetAttribute("PoseOriginalC0") * CFrame.Angles(pitchSign * smoothed * NECK_PITCH_SCALE, 0, 0))
 					else
-						neck.C0 = neck:GetAttribute("PoseOriginalC0")
+						JointUtil.SetC0(neck, neck:GetAttribute("PoseOriginalC0"))
 					end
 				end
 			end

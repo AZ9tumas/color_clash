@@ -7,6 +7,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
 local SettingsController = require(Shared.UIControllers.SettingsController)
+local CombatConfig = require(Shared.Modules.Core.CombatConfig)
 
 local CrosshairController = {}
 
@@ -26,6 +27,20 @@ local hitMarks = {}
 
 local hitAnimCounter = 0
 local feedbackLayerParent = nil
+
+-- Under CombatConfig.GunHandling the held gun reports its real spread cone in
+-- screen pixels and the bars sit on it; nil leaves the old per-shot bloom.
+local spreadGap = nil
+local shownSpreadGap = 0
+-- Hides the bars without handing the mouse cursor back (a sniper scope draws its own).
+local suppressed = false
+
+-- The original hit and kill sound ids are not audio assets and never load.
+-- Under CombatConfig.CombatFeedback the guns' own HitMarker sound plays instead.
+local FIXED_HIT_SOUND = "rbxassetid://7242037470"
+local function hitSound(legacyId: string): string
+	return CombatConfig.IsEnabled("CombatFeedback") and FIXED_HIT_SOUND or legacyId
+end
 
 local function setupDynamicFeedback()
 	if Crosshair:FindFirstChild("FeedbackLayer") then Crosshair.FeedbackLayer:Destroy() end
@@ -106,7 +121,7 @@ function CrosshairController.ShowHitMarker(typeId)
 		
 		if SettingsController.GetValue("Hit Marker Sound") ~= false then 
 			local clickSfx = Instance.new("Sound", Workspace)
-			clickSfx.SoundId = "rbxassetid://4606132034"
+			clickSfx.SoundId = hitSound("rbxassetid://4606132034")
 			clickSfx.Pitch = ((typeId == 2) and 1.3 or 1.0) + math.random(-8, 8)/100 
 			clickSfx.Volume = 0.55
 			clickSfx:Play()
@@ -207,13 +222,13 @@ function CrosshairController.ShowHitMarker(typeId)
 		
 		if SettingsController.GetValue("Kill Sound Effect") ~= false then 
 			local punchSfx = Instance.new("Sound", Workspace)
-			punchSfx.SoundId = "rbxassetid://4606132034"
+			punchSfx.SoundId = hitSound("rbxassetid://4606132034")
 			punchSfx.Pitch = 0.7
 			punchSfx.Volume = 0.85
 			punchSfx:Play()
 			
 			local hitSfx = Instance.new("Sound", Workspace)
-			hitSfx.SoundId = "rbxassetid://8617756184"
+			hitSfx.SoundId = hitSound("rbxassetid://8617756184")
 			hitSfx.Pitch = 1.05 + math.random(-6, 6)/100
 			hitSfx.Volume = 0.9
 			hitSfx:Play()
@@ -227,6 +242,15 @@ end
 function CrosshairController.AddBloom(amount)
 	if not SettingsController.GetValue("Dynamic Crosshair") then return end
 	targetBloom = math.clamp(targetBloom + amount, 0, 75)
+end
+
+function CrosshairController.SetSpreadGap(pixels: number?)
+	spreadGap = pixels
+	if not pixels then shownSpreadGap = 0 end
+end
+
+function CrosshairController.SetSuppressed(isSuppressed: boolean)
+	suppressed = isSuppressed
 end
 
 function CrosshairController.SetCrosshairVisible(isVisible)
@@ -255,6 +279,8 @@ function CrosshairController.Init()
 	end
 
 	RunService.RenderStepped:Connect(function(dt)
+		-- Suppression affects only the aiming bars; FeedbackLayer must stay
+		-- visible for hit and kill markers while looking through a scope.
 		Crosshair.Visible = isVis and SettingsController.GetValue("Show Crosshair")
 		if not Crosshair.Visible then return end
 		
@@ -272,19 +298,28 @@ function CrosshairController.Init()
 			targetBloom = 0
 		end
 
+		local gap = currentBloom
+		if spreadGap then
+			-- the bars are drawn inside UIScale, so undo it to land on the real cone
+			local target = spreadGap / math.max(uiScale.Scale, 0.01)
+			shownSpreadGap += (target - shownSpreadGap) * math.min(1, dt * 20)
+			gap = SettingsController.GetValue("Dynamic Crosshair") and shownSpreadGap or 0
+		end
+
 		local function updateCrosshairPart(name, posCalc)
 			local part = Crosshair:FindFirstChild(name)
 			if originalCrosshairPos[name] and part then
+				part.Visible = not suppressed
 				part.Position = posCalc(originalCrosshairPos[name])
 				local s = part:FindFirstChildOfClass("UIStroke")
 				if s then s.Enabled = hasOutline end
 			end
 		end
 
-		updateCrosshairPart("Top", function(o) return UDim2.new(o.X.Scale, o.X.Offset, o.Y.Scale, o.Y.Offset - currentBloom) end)
-		updateCrosshairPart("Bottom", function(o) return UDim2.new(o.X.Scale, o.X.Offset, o.Y.Scale, o.Y.Offset + currentBloom) end)
-		updateCrosshairPart("Left", function(o) return UDim2.new(o.X.Scale, o.X.Offset - currentBloom, o.Y.Scale, o.Y.Offset) end)
-		updateCrosshairPart("Right", function(o) return UDim2.new(o.X.Scale, o.X.Offset + currentBloom, o.Y.Scale, o.Y.Offset) end)
+		updateCrosshairPart("Top", function(o) return UDim2.new(o.X.Scale, o.X.Offset, o.Y.Scale, o.Y.Offset - gap) end)
+		updateCrosshairPart("Bottom", function(o) return UDim2.new(o.X.Scale, o.X.Offset, o.Y.Scale, o.Y.Offset + gap) end)
+		updateCrosshairPart("Left", function(o) return UDim2.new(o.X.Scale, o.X.Offset - gap, o.Y.Scale, o.Y.Offset) end)
+		updateCrosshairPart("Right", function(o) return UDim2.new(o.X.Scale, o.X.Offset + gap, o.Y.Scale, o.Y.Offset) end)
 	end)
 end
 

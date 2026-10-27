@@ -35,6 +35,44 @@ export type ViewmodelConfig = {
 	GripOffset: CFrame?,
 }
 
+export type SpreadHandling = {
+	Hip: number?,
+	Aim: number?,
+	Move: number?,
+	Air: number?,
+	Slide: number?,
+	AimPenalty: number?,
+	Bloom: number?,
+	MaxBloom: number?,
+	BloomRecovery: number?,
+	BloomRecoveryDelay: number?,
+}
+
+export type FalloffConfig = {
+	Start: number,
+	End: number,
+	Min: number,
+}
+
+export type RecoilPattern = {
+	Pattern: { { number } },
+	Wander: number?,
+	AimScale: number?,
+	ResetTime: number?,
+	RecoveryDelay: number?,
+	RecoveryRate: number?,
+}
+
+export type HandlingConfig = {
+	Spread: SpreadHandling?,
+	Falloff: FalloffConfig?,
+	Headshot: number?,
+	Recoil: RecoilPattern?,
+	TacticalReloadTime: number?,
+	EquipTime: number?,
+	Scope: boolean?,
+}
+
 export type WeaponDefinition = {
 	Damage: number,
 	Cooldown: number,
@@ -51,6 +89,7 @@ export type WeaponDefinition = {
 	Recoil: RecoilConfig?,
 	Aim: AimConfig?,
 	Viewmodel: ViewmodelConfig?,
+	Handling: HandlingConfig?,
 }
 
 export type GunDefinition = WeaponDefinition & {

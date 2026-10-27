@@ -23,7 +23,10 @@ local DataTemplate = {
 		LastClaimedDay = 0,
 		Streak = 0,
 		TotalClaimed = 0
-	}
+	},
+	-- [ChestId] = os.time() the player last opened that chest
+	Chests = {},
+	TutorialDone = false
 }
 
 return DataTemplate

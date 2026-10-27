@@ -268,6 +268,12 @@ function viewmodel:Kick(pitch: number, yaw: number, aiming: boolean?)
 	self.motion:Kick(pitch, yaw, aiming)
 end
 
+-- Procedural draw: the gun rises into place over `duration` seconds.
+function viewmodel:Draw(duration: number)
+	if not ViewmodelSettings.MotionEnabled or not self.motion then return end
+	self.motion:Draw(duration)
+end
+
 function viewmodel:StartADS(adsOffset)
 	if ViewmodelSettings.SpringsEnabled then
 		self.offsetSpring.Target = adsOffset
