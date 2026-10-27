@@ -89,7 +89,7 @@ The round cycles through Voting, InGame (phases `Push` then `Shoot`) and PostRou
 |---|---|---|---|
 | `ClientHitReg` | `false` | `true` | Client-detected hits checked by server lag compensation; server-owned ammo and reloads |
 | `GunHandling` | `false` | `true` | Movement/air/slide/bloom spread with a real-cone crosshair; recoil patterns with aim recovery; damage falloff and per-gun headshots; tactical reloads; shotgun fire-interrupts reload; sniper scope |
-| `QuickSwap` | `false` | `true` | Q/mouse-wheel swap; the held slot's key no longer holsters; per-gun draw time (client and server); procedural draw motion |
+| `QuickSwap` | `false` | `true` | Q/mouse-wheel swap; per-gun draw time (client and server); procedural draw motion |
 | `CombatFeedback` | `false` | `true` | Bullet impacts on surfaces; hit-direction indicator; ammo counter tint; working hit-marker sounds |
 | `Utilities` | `false` | `true` | F throws a frag grenade (2 charges, 12 s recharge each) |
 
@@ -255,7 +255,7 @@ Values as shipped:
 **`UIControllers.MainHudController` (keys):**
 - The game has two slots: **Main** (any gun) on key 1 and **Melee** on key 2.
 - With the flag on:
-  - Pressing the held slot's key does nothing (it no longer holsters).
+  - Pressing the held slot's key puts the weapon away, with or without the flag (2026-10-28). It also records that slot as `lastSlot`, so Q brings the same weapon back out.
   - **Q** switches to the other slot, or to the last-used slot when empty-handed.
   - The **mouse wheel** does the same, with a 0.15 s debounce, only while `IsPlaying`.
 
@@ -285,6 +285,11 @@ Values as shipped:
   - At 0: red (255,60,60).
   - `nil` restores the original color.
   - `GunHandler:updateUI` calls it under the flag; Unequip resets it.
+- **Moving tracers (2026-10-28):** `FXUtil.BulletTracer` used to draw one 0.1-stud neon bar from the muzzle to the hit point and shrink it to nothing over 0.15 s. Past about 25 studs that bar is under 2 pixels thick and gone within a few frames, so shots looked as if they stopped short and turned into a bullet hole. The rays always reached the hit point. Under the flag, `movingTracer` instead flies a streak from the muzzle to the hit point:
+  - Up to `FXConfig.Tracer.Length` (14) studs long, at `Speed` (700 studs/s), or faster so no streak is in the air longer than `MaxTime` (0.3 s).
+  - Its thickness is recomputed every frame from its distance to the camera, so it holds about `Pixels` (2.5) pixels at any range.
+  - One `RenderStepped` connection moves all live streaks and disconnects when none are left.
+  - With the flag off, the old bar is unchanged.
 - **Hit-marker sounds:** `CrosshairController.ShowHitMarker` used `rbxassetid://4606132034` and `8617756184`. Neither is an audio asset, so both always failed with "Asset type does not match requested type". Under the flag, `hitSound()` swaps in `rbxassetid://7242037470`, the guns' own `Handle.HitMarker` sound (verified to load, 0.39 s).
 
 ### 4.6 `Utilities`: frag grenade
@@ -520,3 +525,19 @@ Verification:
 Saved a complete local snapshot, including the earlier gunplay fixes: [color_clash-avatar-fixes.rbxl](../color_clash-avatar-fixes.rbxl), 1,012,238 bytes. Studio initially hung during Download a Copy, then reconnected with all five avatar scripts intact; their sources were verified before the successful retry. Exact source copies are in [studio-recovery/avatar-fixes](../studio-recovery/avatar-fixes). Local `src/` remains stale and was not overwritten or synced with Rojo.
 
 Studio's Output reported **version 657 published** after the snapshot was saved. The avatar-mode setting still needs its separate save/restart step.
+
+## 14. Hidden color blocks stopped bullets (2026-10-28)
+
+**Symptom:** during the Shoot phase, shots ended in mid-air and left a bullet hole there.
+
+**Cause:** each cycle `RoundMechanic` hides every color folder except the chosen one by setting `Transparency = 1` and `CanCollide = false`. `CanQuery` stayed `true`, so every raycast still hit the invisible blocks. That covered the shooter's client cast, the server's cast, and other gameplay raycasts. The same was true of `HitPartMechanic`'s invisible kill floor ("hit part", 50 studs under the map). It must collide, so `CanQuery = false` has no effect on it.
+
+**Fix (not behind a flag; it applies on live servers too):**
+- `RoundMechanic` records each hidden part's `CanQuery`, sets it to `false` while hidden, and restores it at the next Push phase. `RoundMechanic:Stop()` also resets `CanQuery = true` when it resets the map.
+- `HitscanUtil.IGNORE_NAMES` includes `"hit part"`, so bullets pass the kill floor.
+- `LagCompensation`'s line-of-sight check already treats non-colliding, non-queryable parts as clear, so server validation agrees with the client.
+
+**Verified in a live solo round:**
+- During Shoot, the client saw 446 hidden blocks, none queryable.
+- Forty `HitscanUtil.Cast` rays fired down through hidden blocks: none stopped on a hidden block or on the kill floor.
+- After the round returned to Push, all map parts were visible, collidable and queryable again.

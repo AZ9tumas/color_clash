@@ -67,4 +67,16 @@ FXConfig.Slide = {
 	SoundVolume = 1,
 }
 
+-- Moving bullet tracers (CombatConfig.CombatFeedback): a short streak that flies
+-- from the muzzle to where the shot landed.
+FXConfig.Tracer = {
+	Speed = 700, -- studs per second
+	MaxTime = 0.3, -- long shots fly faster so no streak is in the air longer than this
+	Length = 14, -- studs; more than one frame of travel, so the streak never breaks up
+	Pixels = 2.5, -- on-screen thickness, held at any distance from the camera
+	MinWidth = 0.04,
+	Color = Color3.fromRGB(255, 230, 128),
+	Transparency = 0.1,
+}
+
 return FXConfig

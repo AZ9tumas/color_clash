@@ -12,7 +12,9 @@ local SPREAD_TO_RADIANS = 1 / 1000
 -- Small allowance for Vector3 float precision (about 0.0006 degrees).
 local DEVIATION_TOLERANCE = 1e-5
 
-local IGNORE_NAMES = { "RepairP", "Repair" }
+-- "hit part" is HitPartMechanic's invisible kill floor under the map. It has to
+-- collide, so CanQuery=false cannot keep it out of raycasts; skip it by name.
+local IGNORE_NAMES = { "RepairP", "Repair", "hit part" }
 
 function HitscanUtil.IsFiniteVector(value): boolean
 	return typeof(value) == "Vector3"

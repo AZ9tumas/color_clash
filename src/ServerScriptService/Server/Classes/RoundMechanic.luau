@@ -125,7 +125,7 @@ function RoundMechanic:Start()
 					if folder.Name ~= self.roundServer.CurrentColor then
 						for _, part in folder:GetDescendants() do
 							if part:IsA("BasePart") then
-								table.insert(hiddenParts, {obj = part, isPart = true, transparency = part.Transparency, canCollide = part.CanCollide})
+								table.insert(hiddenParts, {obj = part, isPart = true, transparency = part.Transparency, canCollide = part.CanCollide, canQuery = part.CanQuery})
 							elseif part:IsA("Texture") or part:IsA("Decal") then
 								table.insert(hiddenParts, {obj = part, isPart = false, transparency = part.Transparency})
 							end
@@ -150,7 +150,12 @@ function RoundMechanic:Start()
 			for _, data in ipairs(hiddenParts) do
 				if data.obj.Parent then
 					data.obj.Transparency = 1
-					if data.isPart then data.obj.CanCollide = false end
+					if data.isPart then
+						data.obj.CanCollide = false
+						-- Hidden blocks must not stop bullets or other raycasts either.
+						-- CanQuery only takes effect once CanCollide is off.
+						data.obj.CanQuery = false
+					end
 				end
 			end
 
@@ -166,6 +171,7 @@ function RoundMechanic:Start()
 					data.obj.Transparency = data.transparency
 					if data.isPart then
 						data.obj.CanCollide = data.canCollide
+						data.obj.CanQuery = data.canQuery
 					end
 				end
 			end
@@ -207,6 +213,7 @@ function RoundMechanic:Stop()
 				if part:IsA("BasePart") then
 					part.Transparency = 0
 					part.CanCollide = true
+					part.CanQuery = true
 				elseif part:IsA("Texture") or part:IsA("Decal") then
 					part.Transparency = 0.9
 				end

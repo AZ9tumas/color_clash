@@ -3,8 +3,10 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local SoundService = game:GetService("SoundService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local FXConfig = require(ReplicatedStorage.Shared.Modules.Core.FXConfig)
+local CombatConfig = require(ReplicatedStorage.Shared.Modules.Core.CombatConfig)
 
 local FXUtil = {}
 
@@ -297,11 +299,79 @@ function FXUtil.FlashMuzzle(fx, scale)
 	):Play()
 end
 
+-- Moving tracers (CombatConfig.CombatFeedback). One render-step loop flies every
+-- streak in the air, and only runs while there is one.
+local liveTracers = {}
+local tracerLoop = nil
+
+local function placeTracer(tracer, camera)
+	local config = FXConfig.Tracer
+	local head = math.min(tracer.travelled, tracer.distance)
+	local tail = math.clamp(tracer.travelled - config.Length, 0, tracer.distance)
+	local mid = tracer.origin + tracer.direction * ((head + tail) / 2)
+	-- Thickness grows with distance from the camera, so a far streak keeps the
+	-- same few pixels instead of thinning to nothing.
+	local studsPerPixel = 2 * math.tan(math.rad(camera.FieldOfView) / 2) / camera.ViewportSize.Y
+	local width = math.max((mid - camera.CFrame.Position).Magnitude * studsPerPixel * config.Pixels, config.MinWidth)
+	tracer.part.Size = Vector3.new(width, width, math.max(head - tail, 0.05))
+	tracer.part.CFrame = CFrame.lookAt(mid, mid + tracer.direction)
+end
+
+local function stepTracers(dt)
+	local camera = Workspace.CurrentCamera
+	for i = #liveTracers, 1, -1 do
+		local tracer = liveTracers[i]
+		tracer.travelled += tracer.speed * dt
+		-- Finished once the tail has caught up with the impact point.
+		if tracer.travelled - FXConfig.Tracer.Length >= tracer.distance then
+			tracer.part:Destroy()
+			table.remove(liveTracers, i)
+		else
+			placeTracer(tracer, camera)
+		end
+	end
+	if #liveTracers == 0 and tracerLoop then
+		tracerLoop:Disconnect()
+		tracerLoop = nil
+	end
+end
+
+local function movingTracer(origin, targetPos, distance)
+	local config = FXConfig.Tracer
+	local part = makeEffectPart(Enum.PartType.Block)
+	part.Name = "Tracer"
+	part.Color = config.Color
+	part.Transparency = config.Transparency
+
+	local speed = math.max(config.Speed, distance / config.MaxTime)
+	local tracer = {
+		part = part,
+		origin = origin,
+		direction = (targetPos - origin).Unit,
+		distance = distance,
+		speed = speed,
+		-- One frame along already, so the streak shows the frame the shot is fired.
+		travelled = speed / 60,
+	}
+	placeTracer(tracer, Workspace.CurrentCamera)
+	part.Parent = effectsFolder()
+
+	table.insert(liveTracers, tracer)
+	if not tracerLoop then
+		tracerLoop = RunService.RenderStepped:Connect(stepTracers)
+	end
+end
+
 function FXUtil.BulletTracer(origin, targetPos)
 	if not origin or not targetPos then return end
 
 	local distance = (targetPos - origin).Magnitude
 	if distance < 0.1 then return end
+
+	if CombatConfig.IsEnabled("CombatFeedback") then
+		movingTracer(origin, targetPos, distance)
+		return
+	end
 
 	local tracer = Instance.new("Part")
 	tracer.Name = "Tracer"

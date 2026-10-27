@@ -242,8 +242,9 @@ local function equipWeapon(slot)
 
 	if targetTool then
 		if targetTool.Parent == char then
-			-- Under QuickSwap you always hold something: the held slot's key does nothing.
-			if not CombatConfig.IsEnabled("QuickSwap") then humanoid:UnequipTools() end
+			-- The held slot's key puts the weapon away; Q brings it back out.
+			lastSlot = heldSlot() or lastSlot
+			humanoid:UnequipTools()
 		else
 			lastSlot = heldSlot() or lastSlot
 			humanoid:EquipTool(targetTool)
